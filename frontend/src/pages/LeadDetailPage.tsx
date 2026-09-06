@@ -44,6 +44,21 @@ export function LeadDetailPage() {
       ended_at: null,
       notes: data.notes,
     });
+
+    // Update lead status based on call outcome
+    const statusMap: Record<string, string> = {
+      answered: "contacted",
+      busy: "callback",
+      voicemail: "callback",
+      dnc: "do_not_contact",
+      no_answer: "callback",
+      wrong_number: "not_interested",
+      disconnected: "callback",
+    };
+    const newStatus = statusMap[data.outcome];
+    if (newStatus && lead) {
+      updateLeadMutation.mutateAsync({ id: lead.id, status: newStatus as any });
+    }
   }
 
   async function handleDelete() {

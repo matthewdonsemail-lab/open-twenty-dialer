@@ -70,6 +70,28 @@ export function ProspectDetailPage() {
   async function handleCallEnd(data: { outcome: string; duration: number; notes: string; direction: "outbound" | "inbound" }) {
     // Future: add call logging for prospects
     console.log("Call ended:", data);
+
+    // Update prospect status based on call outcome
+    const statusMap: Record<string, string> = {
+      answered: "contacted",
+      busy: "callback",
+      voicemail: "callback",
+      dnc: "do_not_contact",
+      no_answer: "callback",
+      wrong_number: "not_interested",
+      disconnected: "callback",
+    };
+    const newStatus = statusMap[data.outcome];
+    if (newStatus && prospect) {
+      try {
+        await api.prospects.update(prospect.id, { status: newStatus as any });
+        queryClient.invalidateQueries({ queryKey: ["prospect", prospectId] });
+        queryClient.invalidateQueries({ queryKey: ["prospects"] });
+        success("Status updated", `Status changed to "${newStatus}"`);
+      } catch {
+        toastError("Error", "Failed to update status");
+      }
+    }
   }
 
   async function handleStatusChange(newStatus: string) {
