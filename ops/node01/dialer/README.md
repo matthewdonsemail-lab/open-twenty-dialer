@@ -14,6 +14,7 @@ cd ~/services/dialer
 
 # 4. Create .env file with your credentials
 cat > .env << 'EOF'
+TWENTY_BASE_URL=https://your-twenty-instance.com
 TWENTY_API_KEY=your-twenty-api-key-here
 JWT_SECRET=your-random-secret-string-here
 EOF
@@ -38,7 +39,7 @@ To embed the dialer inside Twenty as an iframe:
 
 ```html
 <iframe 
-  src="https://node01.tail4fcf85.ts.net:3000" 
+  src="http://node01.tail4fcf85.ts.net:3000" 
   width="100%" 
   height="800px"
   frameborder="0"
@@ -87,7 +88,7 @@ The frontend should proxy API requests through nginx. If you see CORS errors:
 ### Authentication Failures
 
 If login fails with "Invalid credentials":
-1. Verify the email exists in Twenty (`admin@inferencesaver.com` by default)
+1. Verify the email exists in Twenty
 2. Check that the password matches Twenty's password (not a separate dialer password)
 3. Ensure the Twenty API key has read access to the user table
 

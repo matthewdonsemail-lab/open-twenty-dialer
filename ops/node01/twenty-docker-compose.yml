@@ -49,14 +49,14 @@ services:
     environment:
       PG_DATABASE_URL: postgres://twenty:twenty_password_change_me@postgres:5432/twenty
       REDIS_URL: redis://redis:6379
-      SERVER_URL: https://twenty.inferencesaver.com
-      FRONT_BASE_URL: https://twenty.inferencesaver.com
+      SERVER_URL: ${TWENTY_SERVER_URL}
+      FRONT_BASE_URL: ${TWENTY_FRONT_BASE_URL}
       ACCESS_TOKEN_SECRET: twenty_access_secret_change_me
       LOGIN_TOKEN_SECRET: twenty_login_secret_change_me
       REFRESH_TOKEN_SECRET: twenty_refresh_secret_change_me
       FILE_TOKEN_SECRET: twenty_file_secret_change_me
-      ENCRYPTION_KEY: 923d9b265a838674cd5935da94b876546eb97c7b7179106240f03aa536c60f82
-      APP_SECRET: 1944d5dced785cd14505b115b443cfefb0ed736fb1759b1f2a56b903eefd2500
+      ENCRYPTION_KEY: your-encryption-key-here
+      APP_SECRET: your-app-secret-here
       EMAIL_DRIVER: smtp
       MESSAGE_CHANNEL_TYPE_DRIVER: logger
 
@@ -81,8 +81,8 @@ services:
       LOGIN_TOKEN_SECRET: twenty_login_secret_change_me
       REFRESH_TOKEN_SECRET: twenty_refresh_secret_change_me
       FILE_TOKEN_SECRET: twenty_file_secret_change_me
-      ENCRYPTION_KEY: 923d9b265a838674cd5935da94b876546eb97c7b7179106240f03aa536c60f82
-      APP_SECRET: 1944d5dced785cd14505b115b443cfefb0ed736fb1759b1f2a56b903eefd2500
+      ENCRYPTION_KEY: your-encryption-key-here
+      APP_SECRET: your-app-secret-here
 
 volumes:
   postgres_data:

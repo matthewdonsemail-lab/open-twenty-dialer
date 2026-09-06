@@ -10,9 +10,9 @@ services:
     ports:
       - "4000:4000"
     environment:
-      - TWENTY_BASE_URL=https://twenty.inferencesaver.com
+      - TWENTY_BASE_URL=${TWENTY_BASE_URL}
       - TWENTY_API_KEY=${TWENTY_API_KEY}
-      - TWENTY_DATABASE_URL=postgres://twenty:twenty_password_change_me@twenty-postgres:5432/twenty
+      - TWENTY_DATABASE_URL=postgres://twenty:${POSTGRES_PASSWORD}@twenty-postgres:5432/twenty
       - PORT=4000
       - JWT_SECRET=${JWT_SECRET}
       - SYNC_POLL_INTERVAL_MS=30000

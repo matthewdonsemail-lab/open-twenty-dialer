@@ -16,3 +16,7 @@ data/
 coverage/
 backend/node_modules/
 backend/dist/
+ops/
+test-*.js
+test-*.mjs
+test-pg.*
