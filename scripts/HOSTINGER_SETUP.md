@@ -2,7 +2,7 @@
 
 ## Prerequisites
 - A Hostinger hosting plan with PHP support
-- Domain `call.apexprecisionbilling.com` pointing to your Hostinger server
+- Domain pointing to your Hostinger server
 - Access to Hostinger hPanel
 
 ## Steps
@@ -10,7 +10,7 @@
 ### 1. Deploy the Frontend
 
 ```bash
-cd cold-dailer/frontend
+cd frontend
 npm run build
 ```
 
@@ -28,36 +28,38 @@ RewriteCond %{REQUEST_URI} !^/api/
 RewriteRule ^(.*)$ /index.html [L]
 ```
 
-Note: The Supabase URL and anon key are embedded at build time via `.env.local`. You need to rebuild if you change them.
+Note: The API URL is embedded at build time via `.env.local`. You need to rebuild if you change it.
 
-### 3. Set Up Supabase (Backend)
+### 3. Backend Setup
 
-1. Create a project at https://app.supabase.com
-2. Go to Settings → API → Project URL and anon key
-3. Create `.env.local` in the `frontend/` directory:
+Deploy the backend to your server:
 
+```bash
+cd backend
+npm install
+npm run build
+npm run start
 ```
-VITE_SUPABASE_URL=https://xxxxx.supabase.co
-VITE_SUPABASE_ANON_KEY=eyJ...
+
+Or use Docker:
+
+```bash
+cp .env.example .env.local
+# Edit .env.local with your Twenty credentials
+docker compose up -d
 ```
 
-4. Run the migration SQL in Supabase SQL Editor:
-   - Go to SQL Editor in Supabase dashboard
-   - Copy and run the contents of `supabase/migrations/001_init.sql`
-5. Enable email auth: Authentication → Providers → Email → Enable
+### 4. Twenty Configuration
 
-### 4. SignalWire Setup (for Softphone)
-
-1. Sign up at https://signalwire.com
-2. Get your Space URL and API token from the dashboard
-3. The softphone UI (SIP.js) will use these to connect browsers to SignalWire's SIP network
-4. For V1 the softphone connects SignalWire's SIP to the browser; actual calls need a SignalWire phone number
+1. Ensure you have a Twenty CRM instance running
+2. Create API keys for the dialer in Twenty (Settings → API Keys)
+3. The dialer will use Twenty credentials for authentication
 
 ### 5. Verify
 
-- Visit `https://call.apexprecisionbilling.com`
+- Visit your domain
 - You should see the login page
-- Create an account to get started
+- Log in with your Twenty credentials
 
 ## File Structure for Hostinger
 

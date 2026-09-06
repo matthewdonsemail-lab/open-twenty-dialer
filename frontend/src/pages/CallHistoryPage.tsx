@@ -1,10 +1,10 @@
 import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/lib/supabase";
 import { useCallLogs } from "@/hooks/useCallLogs";
 import { Search, Filter, Phone } from "lucide-react";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import type { Database } from "@/types/database";
+import { api } from "@/lib/apiClient";
 
 type Lead = Database["public"]["Tables"]["leads"]["Row"];
 
@@ -18,10 +18,9 @@ export function CallHistoryPage() {
     queryKey: ["leads", "batch", ...leadIds],
     queryFn: async () => {
       if (leadIds.length === 0) return {};
-      const { data, error } = await supabase.from("leads").select("*").in("id", leadIds);
-      if (error) throw error;
+      const leads = await api.leads.list();
       const map: Record<string, Lead> = {};
-      (data ?? []).forEach((l: Lead) => { map[l.id] = l; });
+      leads.forEach((l: Lead) => { map[l.id] = l; });
       return map;
     },
     enabled: leadIds.length > 0,

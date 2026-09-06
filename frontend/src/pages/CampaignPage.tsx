@@ -1,12 +1,12 @@
 import React, { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/lib/supabase";
 import { useCreateCampaign } from "@/hooks/useCampaigns";
 import { useDeleteCampaign } from "@/hooks/useCampaigns";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { Plus, Edit3, Trash2, Filter, Search, Target, Clock } from "lucide-react";
 import type { Database } from "@/types/database";
+import { api } from "@/lib/apiClient";
 import { CampaignForm } from "@/components/campaigns/CampaignForm";
 
 type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
@@ -15,9 +15,7 @@ export function CampaignPage() {
   const { data: campaigns, isLoading } = useQuery<Campaign[]>({
     queryKey: ["campaigns"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("campaigns").select("*").order("created_at", { ascending: false });
-      if (error) throw error;
-      return data ?? [];
+      return api.campaigns.list();
     },
   });
   const createCampaign = useCreateCampaign();

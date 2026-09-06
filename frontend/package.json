@@ -12,7 +12,6 @@
     "deploy": "cp -r dist/* ../hostinger/"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.111.0",
     "@tanstack/react-query": "^5.101.4",
     "@tanstack/react-query-devtools": "^5.101.4",
     "clsx": "^2.1.1",

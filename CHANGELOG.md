@@ -10,8 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Self-hosted backend with SQLite database
 - Express.js API server with JWT authentication
-- Provider abstraction layer (Supabase or self-hosted backend)
-- SIP configuration module with provider presets
+- Twenty CRM integration for member authentication
+- PostgreSQL password hash verification for Twenty credentials
+- Tailscale deployment support for node01
 - Docker Compose deployment
 - GitHub Actions CI workflow
 - Comprehensive documentation
@@ -19,8 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Rebranded from "Apex Precision Billing" to "Cold Dialer"
-- Refactored SIP configuration into separate module
-- Updated hooks to support multiple data providers
+- Rebranded from "Cold Dialer" to "Open Twenty Dialer"
+- Replaced Supabase auth with Twenty CRM credential verification
+- Removed Supabase dependency entirely
+- Updated hooks to use backend API exclusively
 
 ### Fixed
 - Removed hardcoded email from dev user
@@ -32,11 +35,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Initial release
 - React + Vite + TypeScript frontend
-- Supabase integration for data storage
+- Self-hosted backend with SQLite
+- Twenty CRM integration
 - SIP.js softphone with SignalWire support
 - Lead management with CSV import
 - Campaign management
-- Call scripts with objection handling
 - Call history and logging
 - Dashboard with analytics
 - Admin panel
