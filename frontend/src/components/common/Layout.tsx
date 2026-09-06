@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { signOut } from '@/lib/auth';
+import { api } from '@/lib/apiClient';
 import {
   LayoutDashboard,
   Users,
@@ -36,6 +38,31 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const isLeadDetail = location.pathname.startsWith('/leads/') && location.pathname !== '/leads';
   const isProspectDetail = location.pathname.startsWith('/prospects/') && location.pathname !== '/prospects';
   const currentNav = navItems.find((n) => location.pathname.startsWith(n.to));
+
+  // Extract ID from URL
+  const leadId = useMemo(() => {
+    const match = location.pathname.match(/^\/leads\/([^/]+)$/);
+    return match ? match[1] : null;
+  }, [location.pathname]);
+
+  const prospectId = useMemo(() => {
+    const match = location.pathname.match(/^\/prospects\/([^/]+)$/);
+    return match ? match[1] : null;
+  }, [location.pathname]);
+
+  // Fetch lead name
+  const { data: lead } = useQuery({
+    queryKey: ['lead', leadId],
+    queryFn: () => api.leads.get(leadId ?? ''),
+    enabled: !!leadId,
+  });
+
+  // Fetch prospect name
+  const { data: prospect } = useQuery({
+    queryKey: ['prospect', prospectId],
+    queryFn: () => api.prospects.get(prospectId ?? ''),
+    enabled: !!prospectId,
+  });
 
   async function handleSignOut() {
     await signOut();
@@ -156,8 +183,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
                     <span>Leads</span>
                   </button>
                   <span className="text-[var(--ods-text-tertiary,#8a8a93)]">/</span>
-                  <span className="font-semibold text-[var(--ods-text-primary,#18181b)]">
-                    Lead Record
+                  <span className="font-semibold text-[var(--ods-text-primary,#18181b)] truncate max-w-[200px]">
+                    <span className="text-[var(--ods-text-tertiary,#8a8a93)]">Name:</span>{' '}
+                    {lead ? `${lead.first_name} ${lead.last_name}` : 'Loading...'}
                   </span>
                 </>
               ) : isProspectDetail ? (
@@ -170,8 +198,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
                     <span>Prospects</span>
                   </button>
                   <span className="text-[var(--ods-text-tertiary,#8a8a93)]">/</span>
-                  <span className="font-semibold text-[var(--ods-text-primary,#18181b)]">
-                    Prospect Record
+                  <span className="font-semibold text-[var(--ods-text-primary,#18181b)] truncate max-w-[200px]">
+                    <span className="text-[var(--ods-text-tertiary,#8a8a93)]">Name:</span>{' '}
+                    {prospect ? `${prospect.first_name} ${prospect.last_name}` : 'Loading...'}
                   </span>
                 </>
               ) : (
