@@ -1,4 +1,4 @@
-# Open-Cold-Dialer Setup Guide
+# twenty-dialer Setup Guide
 
 ## Quick Start
 

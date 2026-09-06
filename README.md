@@ -1,4 +1,4 @@
-# Open Cold Dialer
+# twenty-dialer
 
 A browser-based cold calling dialer with bidirectional sync to Twenty CRM. Designed for sales teams to manage outbound calling campaigns with prospects and leads.
 
@@ -9,7 +9,7 @@ A browser-based cold calling dialer with bidirectional sync to Twenty CRM. Desig
 
 ## Overview
 
-Open-Cold-Dialer (OCD) is a self-hosted cold calling application that integrates with Twenty CRM for prospect and lead management. It operates as an iframe within Twenty, providing:
+twenty-dialer is a self-hosted cold calling application that integrates seamlessly with Twenty CRM. It operates as an iframe within Twenty, providing:
 
 - Browser-based softphone via SIP/WebRTC
 - Prospect and lead lifecycle management
@@ -17,7 +17,7 @@ Open-Cold-Dialer (OCD) is a self-hosted cold calling application that integrates
 - Call logging and script management
 - Campaign organization
 
-**Key distinction:** OCD uses a custom `coldCallStatus` field for manual cold calling workflows, separate from Twenty's built-in `outboundState` used by the automated SMS/video pipeline.
+**Key distinction:** twenty-dialer uses a custom `coldCallStatus` field for manual cold calling workflows, separate from Twenty's built-in `outboundState` used by the automated SMS/video pipeline.
 
 ---
 
@@ -61,7 +61,7 @@ flowchart TB
     ProspectsPage -->|HTTP| API
     LeadsPage -->|HTTP| API
     Softphone -->|SIP/WebRTC| Provider[SIP Provider]
-    
+
     API -->|CRUD| DB
     API -->|Sync| SyncService
     SyncService -->|REST API| agencyProspects
@@ -87,10 +87,10 @@ Create/Update Prospect
 
 ## Status Mapping
 
-OCD tracks manual calling outcomes via `coldCallStatus`, separate from the SMS pipeline:
+twenty-dialer tracks manual calling outcomes via `coldCallStatus`, separate from the SMS pipeline:
 
-| OCD Status | Twenty `coldCallStatus` | Meaning |
-|------------|------------------------|---------|
+| Status | Value | Meaning |
+|--------|-------|---------|
 | `new` | `NEW` | Fresh prospect, no contact made |
 | `contacted` | `CONTACTED` | Initial contact made |
 | `interested` | `INTERESTED` | Prospect showed interest |
@@ -98,8 +98,6 @@ OCD tracks manual calling outcomes via `coldCallStatus`, separate from the SMS p
 | `callback` | `CALLBACK` | Scheduled callback needed |
 | `converted` | `CONVERTED` | Became a lead |
 | `do_not_contact` | `DO_NOT_CONTACT` | DNC flagged |
-
-For more details, see [Open Cold Dialer Documentation](docs/okf/datamodel/open-cold-dialer.md).
 
 ---
 
@@ -115,8 +113,8 @@ For more details, see [Open Cold Dialer Documentation](docs/okf/datamodel/open-c
 ### Installation
 
 ```bash
-git clone https://github.com/6t9xstar/Open-Cold-Dialer.git
-cd Open-Cold-Dialer
+git clone https://github.com/matthewdonsemail-lab/open-twenty-dialer.git
+cd open-twenty-dialer
 ```
 
 ### Backend Setup
@@ -186,7 +184,7 @@ See [SIP Providers Guide](docs/sip-providers.md) for detailed setup.
 ## Project Structure
 
 ```
-Open-Cold-Dialer/
+open-twenty-dialer/
 ├── backend/                    # Express API server
 │   ├── src/
 │   │   ├── db/                # SQLite schema + migrations
@@ -292,23 +290,6 @@ npm run build
 
 ---
 
-## Contributing
-
-Contributions welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details.
-
-```bash
-# Fork the repo
-# Create your feature branch
-git checkout -b feature/amazing-feature
-# Commit your changes
-git commit -m "Add amazing feature"
-# Push to the branch
-git push origin feature/amazing-feature
-# Open a Pull Request
-```
-
----
-
 ## License
 
 MIT License — see [LICENSE](LICENSE) for details.
@@ -317,13 +298,6 @@ MIT License — see [LICENSE](LICENSE) for details.
 
 ## Documentation
 
-- [Open Cold Dialer Data Model](docs/okf/datamodel/open-cold-dialer.md) — Detailed architecture and sync documentation
+- [Data Model](docs/okf/datamodel/open-cold-dialer.md) — Detailed architecture and sync documentation
 - [SIP Providers Guide](docs/sip-providers.md) — Configure your SIP provider
 - [Twenty CRM Integration](docs/twenty-integration.md) — Sync configuration guide
-
----
-
-## Support
-
-- [GitHub Issues](https://github.com/6t9xstar/Open-Cold-Dialer/issues) — Report bugs or request features
-- [Documentation](docs/) — Full project documentation

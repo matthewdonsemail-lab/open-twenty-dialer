@@ -5,11 +5,17 @@ const JWT_SECRET = process.env.JWT_SECRET || "cold-dialer-dev-secret-change-in-p
 
 export interface AuthRequest extends Request {
   userId?: string;
+  twentyUserId?: string;
   userRole?: string;
 }
 
-export function generateToken(userId: string): string {
-  return jwt.sign({ userId }, JWT_SECRET, { expiresIn: "7d" });
+export interface TokenPayload {
+  userId: string;
+  twentyUserId?: string;
+}
+
+export function generateToken(payload: TokenPayload): string {
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: "7d" });
 }
 
 export function authMiddleware(req: AuthRequest, res: Response, next: NextFunction): void {
@@ -21,8 +27,9 @@ export function authMiddleware(req: AuthRequest, res: Response, next: NextFuncti
 
   const token = authHeader.slice(7);
   try {
-    const payload = jwt.verify(token, JWT_SECRET) as { userId: string };
+    const payload = jwt.verify(token, JWT_SECRET) as TokenPayload;
     req.userId = payload.userId;
+    req.twentyUserId = payload.twentyUserId;
     next();
   } catch {
     res.status(401).json({ error: "Invalid or expired token" });

@@ -6,7 +6,7 @@ import { StatusBadge } from "@/components/common/StatusBadge";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { LeadForm } from "@/components/leads/LeadForm";
 import { CsvImport } from "@/components/leads/CsvImport";
-import { Search, Plus, Filter, Mail, Phone, MapPin, MoreHorizontal, Download, Upload, RefreshCw } from "lucide-react";
+import { Search, Plus, Mail, Phone, MoreHorizontal, RefreshCw } from "lucide-react";
 
 type StatusFilter = string | "all";
 
@@ -106,159 +106,112 @@ export function ProspectPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Prospects</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            {filteredProspects.length} of {prospects?.length ?? 0} prospects
-          </p>
+    <div className="flex flex-col h-full w-full select-none bg-[var(--ods-bg-primary)]">
+      {/* Twenty-style 40px Action Bar */}
+      <div className="h-10 px-3 flex items-center justify-between border-b border-[var(--ods-border)] shrink-0">
+        <div className="flex items-center gap-2">
+          <span className="text-[13px] font-semibold text-[var(--ods-text-primary)]">All Prospects</span>
+          <span className="text-[11px] font-medium text-[var(--ods-text-secondary)] px-1.5 py-0.5 rounded-[4px] bg-[var(--ods-bg-secondary)] border border-[var(--ods-border)]">
+            {prospects?.length ?? 0}
+          </span>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
           <button
             onClick={handleSyncFromTwenty}
             disabled={syncing}
-            className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition disabled:opacity-50"
+            className="h-7 px-2.5 rounded-[6px] text-[12px] font-medium border border-[var(--ods-border)] text-[var(--ods-text-primary)] hover:bg-[var(--ods-bg-secondary)] transition-colors flex items-center gap-1 disabled:opacity-50"
           >
-            <RefreshCw className={`w-4 h-4 ${syncing ? "animate-spin" : ""}`} />
-            Sync from Twenty
-          </button>
-          <button
-            onClick={() => setShowCsvImport(true)}
-            className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition"
-          >
-            <Upload className="w-4 h-4" />
-            Import CSV
+            <RefreshCw className={`w-3.5 h-3.5 ${syncing ? "animate-spin" : ""}`} />
+            Sync
           </button>
           <button
             onClick={() => setShowForm(true)}
-            className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-brand-600 rounded-lg hover:bg-brand-700 transition"
+            className="h-7 px-2.5 rounded-[6px] text-[12px] font-medium bg-[var(--ods-brand-600)] text-white hover:opacity-90 transition-opacity flex items-center gap-1"
           >
-            <Plus className="w-4 h-4" />
-            New Prospect
+            + New prospect
           </button>
         </div>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-          <input
-            type="text"
-            placeholder="Search prospects..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none"
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          <Filter className="w-4 h-4 text-gray-400" />
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none bg-white"
-          >
-            <option value="all">All Statuses</option>
-            <option value="new">New</option>
-            <option value="contacted">Contacted</option>
-            <option value="interested">Interested</option>
-            <option value="not_interested">Not Interested</option>
-            <option value="callback">Callback</option>
-            <option value="converted">Converted</option>
-            <option value="do_not_contact">DNC</option>
-          </select>
-        </div>
+      {/* Flush Full-Bleed Table */}
+      <div className="flex-1 w-full overflow-auto">
+        <table className="w-full border-collapse text-left">
+          <thead className="sticky top-0 bg-[var(--ods-bg-secondary)] z-10">
+            <tr className="h-8 border-b border-[var(--ods-border)]">
+              <th className="w-8 px-2 text-center">
+                <input type="checkbox" className="rounded-[3px] border-[var(--ods-border)] accent-[var(--ods-brand-600)]" />
+              </th>
+              <th className="px-3 text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-secondary)]">Name</th>
+              <th className="px-3 text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-secondary)]">Company</th>
+              <th className="px-3 text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-secondary)]">Phone</th>
+              <th className="px-3 text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-secondary)]">Status</th>
+              <th className="px-3 text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-secondary)]">Source</th>
+              <th className="w-16 px-3 text-right text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-secondary)]">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[var(--ods-border)]">
+            {isLoading ? (
+              <tr>
+                <td colSpan={7} className="text-center py-8 text-[13px] text-[var(--ods-text-secondary)]">
+                  Loading...
+                </td>
+              </tr>
+            ) : prospects?.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="text-center py-8 text-[13px] text-[var(--ods-text-secondary)]">
+                  No prospects yet. Click "Sync" to import from Twenty.
+                </td>
+              </tr>
+            ) : filteredProspects.map((prospect) => (
+              <tr key={prospect.id} className="h-8 hover:bg-[var(--ods-bg-secondary)] transition-colors group">
+                <td className="w-8 px-2 text-center">
+                  <input type="checkbox" className="rounded-[3px] border-[var(--ods-border)] accent-[var(--ods-brand-600)] opacity-0 group-hover:opacity-100 focus:opacity-100" />
+                </td>
+                <td className="px-3 text-[13px] font-medium text-[var(--ods-text-primary)] truncate max-w-[200px] cursor-pointer hover:text-[var(--ods-brand-600)]" onClick={() => navigate(`/leads/${prospect.id}`)}>
+                  {prospect.first_name} {prospect.last_name}
+                </td>
+                <td className="px-3 text-[13px] text-[var(--ods-text-secondary)] truncate max-w-[180px]">{prospect.company ?? "—"}</td>
+                <td className="px-3 text-[13px] text-[var(--ods-text-secondary)] font-mono">{prospect.phone ?? "—"}</td>
+                <td className="px-3">
+                  <select
+                    value={prospect.status}
+                    onChange={(e) => handleStatusChange(prospect.id, e.target.value)}
+                    className="text-[11px] font-medium bg-transparent border-none cursor-pointer text-[var(--ods-text-primary)] focus:ring-0"
+                  >
+                    <option value="new">New</option>
+                    <option value="contacted">Contacted</option>
+                    <option value="interested">Interested</option>
+                    <option value="not_interested">Not Interested</option>
+                    <option value="callback">Callback</option>
+                    <option value="converted">Converted</option>
+                    <option value="do_not_contact">DNC</option>
+                  </select>
+                </td>
+                <td className="px-3 text-[13px] text-[var(--ods-text-secondary)]">
+                  <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] text-[11px] font-medium bg-[var(--ods-bg-secondary)] border border-[var(--ods-border)] text-[var(--ods-text-primary)]">
+                    {prospect.source || "Twenty"}
+                  </span>
+                </td>
+                <td className="w-16 px-3 text-right">
+                  <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <a href={`tel:${prospect.phone}`} className="p-1 text-[var(--ods-text-secondary)] hover:text-[var(--ods-brand-600)]" title="Call">
+                      <Phone className="w-3.5 h-3.5" />
+                    </a>
+                    {prospect.email && (
+                      <a href={`mailto:${prospect.email}`} className="p-1 text-[var(--ods-text-secondary)] hover:text-[var(--ods-brand-600)]" title="Email">
+                        <Mail className="w-3.5 h-3.5" />
+                      </a>
+                    )}
+                    <button onClick={() => setDeleteConfirm({ id: prospect.id, name: `${prospect.first_name} ${prospect.last_name}` })} className="p-1 text-[var(--ods-text-secondary)] hover:text-red-600" title="Delete">
+                      <MoreHorizontal className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
-
-      {isLoading ? (
-        <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
-          <p className="text-gray-500">Loading prospects...</p>
-        </div>
-      ) : filteredProspects.length === 0 ? (
-        <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
-          <p className="text-gray-500">
-            {prospects?.length === 0 ? "No prospects yet. Click 'Sync from Twenty' to import leads." : "No prospects match your filters"}
-          </p>
-        </div>
-      ) : (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="text-left px-4 py-3 font-medium text-gray-500">Name</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-500">Company</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-500">Phone</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-500">Status</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-500">Source</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-500">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {filteredProspects.map((prospect) => (
-                  <tr key={prospect.id} className="hover:bg-gray-50 transition">
-                    <td className="px-4 py-3 font-medium text-gray-900 cursor-pointer hover:text-brand-600" onClick={() => navigate(`/leads/${prospect.id}`)}>
-                      {prospect.first_name} {prospect.last_name}
-                    </td>
-                    <td className="px-4 py-3 text-gray-600">{prospect.company ?? "—"}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1 text-gray-600">
-                        <Phone className="w-3.5 h-3.5" />
-                        {prospect.phone ?? "—"}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <select
-                        value={prospect.status}
-                        onChange={(e) => handleStatusChange(prospect.id, e.target.value)}
-                        className="text-xs border-none bg-transparent focus:ring-0 cursor-pointer"
-                      >
-                        <option value="new">New</option>
-                        <option value="contacted">Contacted</option>
-                        <option value="interested">Interested</option>
-                        <option value="not_interested">Not Interested</option>
-                        <option value="callback">Callback</option>
-                        <option value="converted">Converted</option>
-                        <option value="do_not_contact">DNC</option>
-                      </select>
-                    </td>
-                    <td className="px-4 py-3 text-gray-500">
-                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                        {prospect.source || "Twenty"}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1">
-                        <a
-                          href={`tel:${prospect.phone}`}
-                          className="p-1.5 text-gray-400 hover:text-brand-600 rounded"
-                          title="Call"
-                        >
-                          <Phone className="w-4 h-4" />
-                        </a>
-                        <a
-                          href={`mailto:${prospect.email}`}
-                          className="p-1.5 text-gray-400 hover:text-brand-600 rounded"
-                          title="Email"
-                        >
-                          <Mail className="w-4 h-4" />
-                        </a>
-                        <button
-                          onClick={() => setDeleteConfirm({ id: prospect.id, name: `${prospect.first_name} ${prospect.last_name}` })}
-                          className="p-1.5 text-gray-400 hover:text-red-600 rounded"
-                          title="Delete"
-                        >
-                          <MoreHorizontal className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
 
       {showForm && (
         <LeadForm

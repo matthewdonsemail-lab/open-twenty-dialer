@@ -1,68 +1,74 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
-import type { User } from "@supabase/supabase-js";
-import { supabase } from "@/lib/supabase";
+import { api, getAuthToken } from "@/lib/apiClient";
+
+export interface DialerUser {
+  id: string;
+  email: string;
+  fullName: string | null;
+  role: string;
+  twentyUserId?: string;
+  /** Present so Layout's `user_metadata?.full_name` access keeps working. */
+  user_metadata: { full_name: string | null };
+}
 
 interface AuthContextType {
-  user: User | null;
+  user: DialerUser | null;
   loading: boolean;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
+  refreshUser: async () => {},
 });
 
-const DEV_USER: User = {
-  id: "dev-user-001",
-  app_metadata: { provider: "email", providers: ["email"] },
-  user_metadata: { full_name: "Admin User", avatar_url: null },
-  aud: "authenticated",
-  created_at: new Date().toISOString(),
-  email: "dev@example.com",
-  email_confirmed_at: new Date().toISOString(),
-  last_sign_in_at: new Date().toISOString(),
-  role: "authenticated",
-  updated_at: new Date().toISOString(),
-  phone: undefined,
-  confirmed_at: new Date().toISOString(),
-} as User;
+function toDialerUser(raw: any): DialerUser {
+  const fullName = raw?.fullName ?? raw?.full_name ?? null;
+  return {
+    id: raw?.id ?? "",
+    email: raw?.email ?? "",
+    fullName,
+    role: raw?.role ?? "agent",
+    twentyUserId: raw?.twentyUserId,
+    user_metadata: { full_name: fullName },
+  };
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<DialerUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (!(supabase as any).isConfigured) {
-      setUser(DEV_USER);
+  const refreshUser = React.useCallback(async () => {
+    const token = getAuthToken();
+    if (!token) {
+      setUser(null);
       setLoading(false);
       return;
     }
-
-    supabase.auth.getSession().then(({ data: { session } }: { data: { session: any } }) => {
-      if (session?.user) {
-        setUser(session.user);
-      } else {
-        console.warn("No active Supabase session. Using dev user for development.");
-        setUser(DEV_USER);
-      }
+    try {
+      const raw = await api.auth.me();
+      setUser(toDialerUser(raw));
+    } catch {
+      setUser(null);
+    } finally {
       setLoading(false);
-    }).catch(() => {
-      setUser(DEV_USER);
-      setLoading(false);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event: string, session: any) => {
-        setUser(session?.user ?? DEV_USER);
-        setLoading(false);
-      }
-    );
-
-    return () => subscription.unsubscribe();
+    }
   }, []);
 
+  useEffect(() => {
+    refreshUser();
+
+    // Re-verify on window focus (e.g. returning to the tab).
+    const onFocus = () => {
+      refreshUser();
+    };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [refreshUser]);
+
   return (
-    <AuthContext.Provider value={{ user, loading }}>
+    <AuthContext.Provider value={{ user, loading, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

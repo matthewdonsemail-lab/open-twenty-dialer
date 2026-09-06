@@ -1,0 +1,89 @@
+version: '3.4'
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: twenty-postgres
+    restart: always
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: twenty
+      POSTGRES_USER: twenty
+      POSTGRES_PASSWORD: twenty_password_change_me
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U twenty"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: twenty-redis
+    restart: always
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  server:
+    image: twentycrm/twenty:v2.25.1
+    container_name: twenty-server
+    restart: always
+    ports:
+      - "3005:3000"
+    volumes:
+      - /home/deepman/services/twenty/data/server-local-storage:/app/packages/twenty-server/.local-storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - /home/deepman/services/twenty/.env.local
+    environment:
+      PG_DATABASE_URL: postgres://twenty:twenty_password_change_me@postgres:5432/twenty
+      REDIS_URL: redis://redis:6379
+      SERVER_URL: https://twenty.inferencesaver.com
+      FRONT_BASE_URL: https://twenty.inferencesaver.com
+      ACCESS_TOKEN_SECRET: twenty_access_secret_change_me
+      LOGIN_TOKEN_SECRET: twenty_login_secret_change_me
+      REFRESH_TOKEN_SECRET: twenty_refresh_secret_change_me
+      FILE_TOKEN_SECRET: twenty_file_secret_change_me
+      ENCRYPTION_KEY: 923d9b265a838674cd5935da94b876546eb97c7b7179106240f03aa536c60f82
+      APP_SECRET: 1944d5dced785cd14505b115b443cfefb0ed736fb1759b1f2a56b903eefd2500
+      EMAIL_DRIVER: smtp
+      MESSAGE_CHANNEL_TYPE_DRIVER: logger
+
+  worker:
+    image: twentycrm/twenty:v2.25.1
+    container_name: twenty-worker
+    restart: always
+    command: ["yarn", "worker:prod"]
+    volumes:
+      - /home/deepman/services/twenty/data/server-local-storage:/app/packages/twenty-server/.local-storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - /home/deepman/services/twenty/.env.local
+    environment:
+      PG_DATABASE_URL: postgres://twenty:twenty_password_change_me@postgres:5432/twenty
+      REDIS_URL: redis://redis:6379
+      ACCESS_TOKEN_SECRET: twenty_access_secret_change_me
+      LOGIN_TOKEN_SECRET: twenty_login_secret_change_me
+      REFRESH_TOKEN_SECRET: twenty_refresh_secret_change_me
+      FILE_TOKEN_SECRET: twenty_file_secret_change_me
+      ENCRYPTION_KEY: 923d9b265a838674cd5935da94b876546eb97c7b7179106240f03aa536c60f82
+      APP_SECRET: 1944d5dced785cd14505b115b443cfefb0ed736fb1759b1f2a56b903eefd2500
+
+volumes:
+  postgres_data:
+  redis_data:

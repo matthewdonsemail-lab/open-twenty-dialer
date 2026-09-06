@@ -44,7 +44,7 @@ router.post("/", async (req: AuthRequest, res) => {
     type || "outbound",
     status || "active",
     settings ? JSON.stringify(settings) : null,
-    req.userId || null,
+    req.twentyUserId || req.userId,
     syncId,
     now,
     now

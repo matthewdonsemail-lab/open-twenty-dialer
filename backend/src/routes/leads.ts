@@ -40,6 +40,9 @@ router.post("/", async (req: AuthRequest, res) => {
     assigned_to, tags, notes, dnc,
   } = req.body;
 
+  // Default ownership to the logged-in member's Twenty user id.
+  const ownerId = assigned_to || req.twentyUserId || req.userId;
+
   db.prepare(
     `INSERT INTO leads (id, first_name, last_name, company, phone, email, website, address, city, state, zip, status, source, campaign_id, assigned_to, tags, notes, dnc, sync_id, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
@@ -47,7 +50,7 @@ router.post("/", async (req: AuthRequest, res) => {
     id, first_name || null, last_name || null, company || null,
     phone || null, email || null, website || null, address || null,
     city || null, state || null, zip || null, status || "new",
-    source || null, campaign_id || null, assigned_to || null,
+    source || null, campaign_id || null, ownerId,
     tags ? JSON.stringify(tags) : null, notes || null,
     dnc ? 1 : 0, syncId, now, now
   );
@@ -58,7 +61,10 @@ router.post("/", async (req: AuthRequest, res) => {
   if (syncEnabled) {
     try {
       const config = loadSyncConfig();
-      await createAgencyLead(config, { ...mapOcdLeadToAgencyLead(mapped), sync_id: syncId });
+      await createAgencyLead(config, {
+        ...mapOcdLeadToAgencyLead({ ...mapped, createdById: req.twentyUserId }),
+        sync_id: syncId,
+      });
     } catch (err) {
       console.error("[sync] failed to sync lead create:", err);
     }
@@ -67,7 +73,7 @@ router.post("/", async (req: AuthRequest, res) => {
   res.status(201).json(mapped);
 });
 
-router.patch("/:id", async (req, res) => {
+router.patch("/:id", async (req: AuthRequest, res) => {
   const existing = db.prepare("SELECT * FROM leads WHERE id = ?").get(req.params.id) as any;
   if (!existing) {
     res.status(404).json({ error: "Lead not found" });
@@ -106,7 +112,7 @@ router.patch("/:id", async (req, res) => {
   if (syncEnabled && existing.sync_id) {
     try {
       const config = loadSyncConfig();
-      await updateAgencyLead(config, existing.sync_id, mapOcdLeadToAgencyLead(mapped));
+      await updateAgencyLead(config, existing.sync_id, mapOcdLeadToAgencyLead({ ...mapped, createdById: req.twentyUserId }));
     } catch (err) {
       console.error("[sync] failed to sync lead update:", err);
     }
@@ -115,7 +121,7 @@ router.patch("/:id", async (req, res) => {
   res.json(mapped);
 });
 
-router.delete("/:id", async (req, res) => {
+router.delete("/:id", async (req: AuthRequest, res) => {
   const existing = db.prepare("SELECT * FROM leads WHERE id = ?").get(req.params.id) as any;
   if (!existing) {
     res.status(404).json({ error: "Lead not found" });
@@ -192,7 +198,7 @@ router.post("/import", async (req: AuthRequest, res) => {
       const config = loadSyncConfig();
       const importedLeads = db.prepare("SELECT * FROM leads WHERE sync_id IN (???)").all(importedSyncIds) as any[];
       for (const lead of importedLeads) {
-        await createAgencyLead(config, { ...mapOcdLeadToAgencyLead(mapLead(lead)), sync_id: lead.sync_id });
+        await createAgencyLead(config, { ...mapOcdLeadToAgencyLead({ ...mapLead(lead), createdById: req.twentyUserId }), sync_id: lead.sync_id });
       }
     } catch (err) {
       console.error("[sync] failed to sync imported leads:", err);

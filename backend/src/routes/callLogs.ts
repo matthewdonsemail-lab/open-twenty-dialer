@@ -47,13 +47,16 @@ router.post("/", async (req: AuthRequest, res) => {
     sip_call_id, started_at, ended_at,
   } = req.body;
 
+  // Attribute the call to the logged-in member when not explicitly set.
+  const callUserId = user_id || req.twentyUserId || req.userId;
+
   db.prepare(
     `INSERT INTO call_logs (id, lead_id, user_id, campaign_id, direction, outcome, duration_seconds, recording_url, notes, transcript, sip_call_id, started_at, ended_at, sync_id)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     id,
     lead_id || null,
-    user_id || req.userId || null,
+    callUserId,
     campaign_id || null,
     direction || "outbound",
     outcome || "no_answer",

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { signIn } from "@/lib/auth";
+import { useAuth } from "@/components/auth/AuthProvider";
 import { LogIn, Mail, Lock, AlertCircle } from "lucide-react";
 import { z } from "zod";
 
@@ -11,6 +12,7 @@ const loginSchema = z.object({
 
 export function LoginPage() {
   const navigate = useNavigate();
+  const { refreshUser } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -36,6 +38,7 @@ export function LoginPage() {
     setLoading(true);
     try {
       await signIn(email, password);
+      await refreshUser();
       navigate("/dashboard");
     } catch (err: any) {
       setError(err.message ?? "Login failed");
@@ -102,10 +105,7 @@ export function LoginPage() {
             )}
           </button>
           <p className="text-center text-sm text-gray-500">
-            Don't have an account?{" "}
-            <Link to="/signup" className="font-medium text-brand-600 hover:text-brand-700">
-              Create one
-            </Link>
+            Members are created in Twenty. Sign in with your Twenty credentials.
           </p>
         </form>
       </div>

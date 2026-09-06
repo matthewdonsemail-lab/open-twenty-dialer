@@ -23,6 +23,7 @@ import prospectsRoutes from "./routes/prospects.js";
 import syncRoutes from "./routes/sync.js";
 import { loadSyncConfig } from "./sync/config.js";
 import { SyncServiceImpl } from "./sync/service.js";
+import { getTwentyPgStatus } from "./db/twenty-pg.js";
 
 const app = express();
 const PORT = parseInt(process.env.PORT || "4000", 10);
@@ -31,7 +32,16 @@ app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: "10mb" }));
 
 app.get("/api/health", (_req, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString() });
+  const twentyPg = getTwentyPgStatus();
+  res.json({
+    status: "ok",
+    timestamp: new Date().toISOString(),
+    twentyCrm: {
+      apiKeyConfigured: Boolean(process.env.TWENTY_API_KEY),
+      databaseUrlConfigured: twentyPg.configured,
+      databaseMessage: twentyPg.message,
+    },
+  });
 });
 
 app.use("/api/auth", authRoutes);
@@ -46,13 +56,21 @@ app.use("/api/sync", syncRoutes);
 let syncService: SyncServiceImpl | null = null;
 if (process.env.TWENTY_BASE_URL && process.env.TWENTY_API_KEY) {
   try {
-    const config = loadSyncConfig();
-    syncService = new SyncServiceImpl(config);
+    const cfg = loadSyncConfig();
+    syncService = new SyncServiceImpl(cfg);
     syncService.init().catch(console.error);
     console.log("[sync] sync service enabled");
   } catch (err) {
     console.warn("[sync] failed to initialize:", err);
   }
+}
+
+// Log whether Twenty Postgres is available for login
+const twentyPgStatus = getTwentyPgStatus();
+if (!twentyPgStatus.configured) {
+  console.warn("[auth] Twenty credential verification is unavailable:", twentyPgStatus.message);
+} else {
+  console.log("[auth] Twenty credential verification is configured.");
 }
 
 app.listen(PORT, "0.0.0.0", () => {

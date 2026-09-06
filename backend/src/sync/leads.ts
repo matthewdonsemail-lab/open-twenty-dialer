@@ -61,6 +61,8 @@ interface AgencyLeadWrite {
   outboundMessage?: string
   replyAt?: string
   agencyProspectId?: string
+  /** Twenty user id of the member who created/owns this record. */
+  createdById?: string
 }
 
 interface AgencyLeadRow extends AgencyLeadWrite {
@@ -101,6 +103,7 @@ export function mapOcdLeadToAgencyLead(lead: {
   notes?: string
   dnc?: boolean
   sync_id?: string
+  createdById?: string
 }): AgencyLeadWrite {
   const fullName = [lead.first_name, lead.last_name].filter(Boolean).join(" ").trim() || undefined
   // Use the built-in status for backward compatibility with SMS pipeline
@@ -125,6 +128,7 @@ export function mapOcdLeadToAgencyLead(lead: {
     coldCallStatus,
     note: noteParts.length > 0 ? noteParts.join("\n") : undefined,
     outboundMessage: lead.sync_id, // Store sync_id here for lookup
+    createdById: lead.createdById,
   }
 }
 

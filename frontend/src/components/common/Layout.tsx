@@ -176,7 +176,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </header>
 
         {/* content body */}
-        <main className="flex-1 overflow-y-auto p-6 bg-[var(--ods-bg-primary,#ffffff)]">
+        <main className="flex flex-col flex-1 min-w-0 h-[calc(100vh-40px)] overflow-hidden bg-[var(--ods-bg-primary)]">
           {children}
         </main>
       </div>

@@ -1,42 +1,20 @@
 import { Router } from "express";
-import bcrypt from "bcryptjs";
 import { v4 as uuid } from "uuid";
 import db from "../db/database.js";
 import { generateToken, authMiddleware, AuthRequest } from "../middleware/auth.js";
+import { verifyTwentyUser } from "../db/twenty-pg.js";
 
 const router = Router();
 
-router.post("/signup", async (req, res) => {
-  try {
-    const { email, password, fullName } = req.body;
-    if (!email || !password) {
-      res.status(400).json({ error: "Email and password are required" });
-      return;
-    }
-
-    const existing = db.prepare("SELECT id FROM profiles WHERE email = ?").get(email);
-    if (existing) {
-      res.status(409).json({ error: "Email already registered" });
-      return;
-    }
-
-    const id = uuid();
-    const passwordHash = await bcrypt.hash(password, 10);
-
-    db.prepare(
-      "INSERT INTO profiles (id, email, full_name, role) VALUES (?, ?, ?, 'agent')"
-    ).run(id, email, fullName || null);
-
-    const token = generateToken(id);
-    res.json({
-      user: { id, email, fullName: fullName || null, role: "agent" },
-      token,
-    });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
+/**
+ * Login — verifies credentials against Twenty's own `core."user"` table.
+ *
+ * Twenty is the source of truth for who can log in. The dialer never
+ * stores passwords; it delegates entirely to Twenty's `passwordHash`
+ * (bcrypt). On success we upsert a lightweight cache row in `profiles`
+ * so the rest of the dialer can reference a local id, and mint a JWT
+ * carrying both the local id and the Twenty user id.
+ */
 router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -45,25 +23,70 @@ router.post("/login", async (req, res) => {
       return;
     }
 
-    const user = db.prepare("SELECT * FROM profiles WHERE email = ?").get(email) as any;
-    if (!user) {
+    let twentyUser;
+    try {
+      twentyUser = await verifyTwentyUser(email, password);
+    } catch (err: any) {
+      // TWENTY_DATABASE_URL missing or pool error
+      res.status(503).json({
+        error: err.message ?? "Authentication service unavailable",
+        code: "AUTH_SERVICE_UNAVAILABLE",
+      });
+      return;
+    }
+
+    if (!twentyUser) {
       res.status(401).json({ error: "Invalid credentials" });
       return;
     }
 
-    const token = generateToken(user.id);
+    // Upsert a local cache row keyed by the Twenty user id, so leads,
+    // call logs, etc. can reference a stable local id.
+    const fullName = [twentyUser.firstName, twentyUser.lastName]
+      .filter(Boolean)
+      .join(" ") || twentyUser.email;
+
+    const existing = db
+      .prepare("SELECT id FROM profiles WHERE id = ?")
+      .get(twentyUser.id) as { id: string } | undefined;
+
+    if (existing) {
+      db.prepare(
+        "UPDATE profiles SET email = ?, full_name = ?, updated_at = datetime('now') WHERE id = ?",
+      ).run(twentyUser.email, fullName, twentyUser.id);
+    } else {
+      db.prepare(
+        "INSERT INTO profiles (id, email, full_name, role) VALUES (?, ?, ?, 'agent')",
+      ).run(twentyUser.id, twentyUser.email, fullName);
+    }
+
+    const token = generateToken({
+      userId: twentyUser.id,
+      twentyUserId: twentyUser.id,
+    });
     res.json({
       user: {
-        id: user.id,
-        email: user.email,
-        fullName: user.full_name,
-        role: user.role,
+        id: twentyUser.id,
+        email: twentyUser.email,
+        fullName,
+        role: "agent",
       },
       token,
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
+});
+
+/**
+ * Signup is disabled — members are created in Twenty, not in the dialer.
+ * Twenty is the source of truth for who can log in.
+ */
+router.post("/signup", (_req, res) => {
+  res.status(403).json({
+    error:
+      "Sign up is disabled. Create the member in Twenty, then log in with their Twenty credentials.",
+  });
 });
 
 router.get("/me", authMiddleware, (req: AuthRequest, res) => {
@@ -77,6 +100,7 @@ router.get("/me", authMiddleware, (req: AuthRequest, res) => {
     email: user.email,
     fullName: user.full_name,
     role: user.role,
+    twentyUserId: req.twentyUserId,
   });
 });
 
