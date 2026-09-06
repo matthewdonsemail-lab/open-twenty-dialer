@@ -2,6 +2,8 @@ import React from "react";
 import { useLeads } from "@/hooks/useLeads";
 import { useCallLogs } from "@/hooks/useCallLogs";
 import { BarChart3, Users, Phone, TrendingUp, Clock } from "lucide-react";
+import { PageCanvas } from "@/components/common/PageCanvas";
+import { WidgetCard } from "@/components/ui/WidgetCard";
 
 export function AdminPage() {
   const { data: leads } = useLeads();
@@ -31,75 +33,72 @@ export function AdminPage() {
   ];
 
   const outcomeBreakdown = [
-    { label: "Answered", count: answeredCalls, color: "bg-green-500" },
+    { label: "Answered", count: answeredCalls, color: "bg-emerald-500" },
     { label: "No Answer", count: (callLogs ?? []).filter((l) => l.outcome === "no_answer").length ?? 0, color: "bg-gray-400" },
     { label: "Busy", count: (callLogs ?? []).filter((l) => l.outcome === "busy").length ?? 0, color: "bg-red-400" },
-    { label: "Voicemail", count: (callLogs ?? []).filter((l) => l.outcome === "voicemail").length ?? 0, color: "bg-yellow-400" },
+    { label: "Voicemail", count: (callLogs ?? []).filter((l) => l.outcome === "voicemail").length ?? 0, color: "bg-amber-400" },
   ];
 
   const maxOutcome = Math.max(...outcomeBreakdown.map((o) => o.count), 1);
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900">Administration</h1>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <PageCanvas
+      title="Administration"
+      maxWidth="4xl"
+    >
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
         {[
-          { label: "Total Leads", value: totalLeads, icon: Users, bgClass: "bg-blue-50", iconClass: "text-blue-600" },
-          { label: "New Leads", value: newLeads, icon: TrendingUp, bgClass: "bg-emerald-50", iconClass: "text-emerald-600" },
-          { label: "Total Calls", value: totalCalls, icon: Phone, bgClass: "bg-purple-50", iconClass: "text-purple-600" },
-          { label: "Avg Duration", value: `${avgDuration}s`, icon: Clock, bgClass: "bg-amber-50", iconClass: "text-amber-600" },
-          { label: "Conversion Rate", value: `${conversionRate}%`, icon: BarChart3, bgClass: "bg-green-50", iconClass: "text-green-600" },
+          { label: "Total Leads", value: totalLeads, icon: Users },
+          { label: "New Leads", value: newLeads, icon: TrendingUp },
+          { label: "Total Calls", value: totalCalls, icon: Phone },
+          { label: "Avg Duration", value: `${avgDuration}s`, icon: Clock },
+          { label: "Conversion Rate", value: `${conversionRate}%`, icon: BarChart3 },
         ].map((stat) => {
           const Icon = stat.icon;
           return (
-            <div key={stat.label} className="bg-white rounded-xl p-5 border border-gray-100 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-500">{stat.label}</p>
-                  <p className="text-2xl font-bold text-gray-900 mt-1">{stat.value}</p>
-                </div>
-                <div className={`p-3 rounded-lg ${stat.bgClass}`}>
-                  <Icon className={`w-6 h-6 ${stat.iconClass}`} />
-                </div>
+            <WidgetCard key={stat.label} className="p-3">
+              <div className="flex items-center justify-between mb-2">
+                <Icon className="w-4 h-4 text-[var(--ods-text-tertiary)]" />
               </div>
-            </div>
+              <p className="text-[20px] font-semibold text-[var(--ods-text-primary)]">{stat.value}</p>
+              <p className="text-[11px] font-medium text-[var(--ods-text-tertiary)] uppercase tracking-wider mt-1">
+                {stat.label}
+              </p>
+            </WidgetCard>
           );
         })}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-xl p-5 border border-gray-100 shadow-sm">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Call Outcomes</h2>
-          <div className="space-y-3">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        <WidgetCard title="Call Outcomes">
+          <div className="space-y-2">
             {outcomeBreakdown.map((item) => (
               <div key={item.label} className="flex items-center gap-3">
-                <span className="w-20 text-xs text-gray-500">{item.label}</span>
-                <div className="flex-1 bg-gray-100 rounded-full h-4 overflow-hidden">
+                <span className="w-20 text-[12px] text-[var(--ods-text-secondary)]">{item.label}</span>
+                <div className="flex-1 bg-[var(--ods-bg-primary)] rounded-full h-4 overflow-hidden">
                   <div
                     className={`h-full rounded-full ${item.color} transition-all`}
                     style={{ width: `${(item.count / maxOutcome) * 100}%` }}
                   />
                 </div>
-                <span className="text-xs font-semibold text-gray-700 w-8 text-right">{item.count}</span>
+                <span className="text-[12px] font-semibold text-[var(--ods-text-primary)] w-8 text-right">{item.count}</span>
               </div>
             ))}
           </div>
-        </div>
+        </WidgetCard>
 
-        <div className="bg-white rounded-xl p-5 border border-gray-100 shadow-sm">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Lead Status Breakdown</h2>
-          <div className="space-y-3">
+        <WidgetCard title="Lead Status Breakdown">
+          <div className="space-y-2">
             {statusBreakdown.map((item) => (
               <div key={item.label} className="flex items-center gap-3">
-                <div className={`w-3 h-3 rounded-full ${item.color}`} />
-                <span className="flex-1 text-sm text-gray-600">{item.label}</span>
-                <span className="text-sm font-semibold text-gray-900">{item.count}</span>
+                <div className={`w-2 h-2 rounded-full ${item.color}`} />
+                <span className="flex-1 text-[12px] text-[var(--ods-text-secondary)]">{item.label}</span>
+                <span className="text-[12px] font-semibold text-[var(--ods-text-primary)]">{item.count}</span>
               </div>
             ))}
           </div>
-        </div>
+        </WidgetCard>
       </div>
-    </div>
+    </PageCanvas>
   );
 }

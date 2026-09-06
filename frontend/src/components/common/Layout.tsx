@@ -34,6 +34,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
 
   const isLeadDetail = location.pathname.startsWith('/leads/') && location.pathname !== '/leads';
+  const isProspectDetail = location.pathname.startsWith('/prospects/') && location.pathname !== '/prospects';
   const currentNav = navItems.find((n) => location.pathname.startsWith(n.to));
 
   async function handleSignOut() {
@@ -157,6 +158,20 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   <span className="text-[var(--ods-text-tertiary,#8a8a93)]">/</span>
                   <span className="font-semibold text-[var(--ods-text-primary,#18181b)]">
                     Lead Record
+                  </span>
+                </>
+              ) : isProspectDetail ? (
+                <>
+                  <button
+                    onClick={() => navigate('/prospects')}
+                    className="flex items-center gap-1.5 text-[var(--ods-text-secondary,#575757)] hover:text-[var(--ods-text-primary,#18181b)] transition-colors"
+                  >
+                    <Users className="w-3.5 h-3.5 opacity-70" />
+                    <span>Prospects</span>
+                  </button>
+                  <span className="text-[var(--ods-text-tertiary,#8a8a93)]">/</span>
+                  <span className="font-semibold text-[var(--ods-text-primary,#18181b)]">
+                    Prospect Record
                   </span>
                 </>
               ) : (

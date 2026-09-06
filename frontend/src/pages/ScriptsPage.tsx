@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import { BookOpen, AlertTriangle, Search } from "lucide-react";
+import { PageCanvas } from "@/components/common/PageCanvas";
+import { WidgetCard } from "@/components/ui/WidgetCard";
 import type { Database } from "@/types/database";
 
 type Script = Database["public"]["Tables"]["call_scripts"]["Row"];
@@ -51,19 +53,23 @@ export function ScriptsPage() {
     : [];
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900">Call Scripts</h1>
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-        <input
-          type="text"
-          placeholder="Search scripts..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none"
-        />
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+    <PageCanvas
+      title="Call Scripts"
+      maxWidth="6xl"
+      actions={
+        <div className="relative">
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--ods-text-tertiary)]" />
+          <input
+            type="text"
+            placeholder="Search scripts..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-7 pr-3 py-1.5 text-[12px] border border-[var(--ods-border)] rounded-[4px] bg-[var(--ods-bg-primary)] text-[var(--ods-text-primary)] placeholder:text-[var(--ods-text-tertiary)] outline-none focus:border-[var(--ods-brand-500)]"
+          />
+        </div>
+      }
+    >
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
         {filtered.map((script) => (
           <button
             key={script.id}
@@ -71,80 +77,68 @@ export function ScriptsPage() {
               setSelectedScript(script);
               setActiveObjection(null);
             }}
-            className="text-left bg-white rounded-xl p-5 border border-gray-200 hover:border-brand-300 hover:shadow-md transition"
+            className="text-left bg-[var(--ods-bg-secondary)] border border-[var(--ods-border)] rounded-[6px] p-4 hover:border-[var(--ods-brand-500)] transition-colors"
           >
             <div className="flex items-center gap-2 mb-2">
-              <BookOpen className="w-5 h-5 text-brand-600" />
-              <h3 className="font-semibold text-gray-900">{script.title}</h3>
+              <BookOpen className="w-4 h-4 text-[var(--ods-brand-600)]" />
+              <h3 className="text-[13px] font-semibold text-[var(--ods-text-primary)]">{script.title}</h3>
             </div>
-            <span className="inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-brand-100 text-brand-800">
-              {script.category}
-            </span>
-            {script.is_active && (
-              <span className="ml-2 inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800">
-                Active
+            <div className="flex items-center gap-2">
+              <span className="inline-block px-2 py-0.5 rounded-[4px] text-[11px] font-medium bg-[var(--ods-bg-primary)] border border-[var(--ods-border)] text-[var(--ods-text-secondary)]">
+                {script.category}
               </span>
-            )}
+              {script.is_active && (
+                <span className="inline-block px-2 py-0.5 rounded-[4px] text-[11px] font-medium bg-emerald-500/10 text-emerald-700">
+                  Active
+                </span>
+              )}
+            </div>
           </button>
         ))}
       </div>
 
       {selectedScript && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-5 border-b border-gray-200">
-              <div className="flex items-center gap-2">
-                <BookOpen className="w-5 h-5 text-brand-600" />
-                <h2 className="text-lg font-semibold text-gray-900">{selectedScript.title}</h2>
-              </div>
-              <button
-                onClick={() => setSelectedScript(null)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <Search className="w-5 h-5" />
-              </button>
+        <WidgetCard title={selectedScript.title} className="mb-6">
+          <div className="space-y-4">
+            <span className="inline-block px-2.5 py-0.5 rounded-[4px] text-[11px] font-medium bg-[var(--ods-bg-primary)] border border-[var(--ods-border)] text-[var(--ods-text-secondary)]">
+              {selectedScript.category}
+            </span>
+            <div className="bg-[var(--ods-bg-primary)] rounded-[4px] p-3 border border-[var(--ods-border)]">
+              <p className="text-[13px] text-[var(--ods-text-primary)] leading-relaxed whitespace-pre-wrap">
+                {selectedScript.content}
+              </p>
             </div>
-            <div className="p-5 space-y-5">
-              <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-brand-100 text-brand-800">
-                {selectedScript.category}
-              </span>
-              <div className="bg-gray-50 rounded-lg p-4">
-                <p className="text-gray-800 leading-relaxed whitespace-pre-wrap">
-                  {selectedScript.content}
-                </p>
-              </div>
-              <div>
-                <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 text-amber-500" />
-                  Common Objections & Responses
-                </h3>
-                <div className="space-y-2">
-                  {objections.map(([objection, data]: [string, any]) => (
-                    <div key={objection}>
-                      <button
-                        onClick={() =>
-                          setActiveObjection(
-                            activeObjection === objection ? null : objection
-                          )
-                        }
-                        className="w-full text-left p-3 rounded-lg border border-gray-200 hover:border-brand-300 hover:bg-brand-50 transition text-sm"
-                      >
-                        <span className="font-medium text-gray-900">"{objection}"</span>
-                        <span className="text-xs text-gray-400 ml-2">{data.category}</span>
-                      </button>
-                      {activeObjection === objection && (
-                        <div className="mt-2 p-3 bg-brand-50 rounded-lg border border-brand-200 text-sm text-brand-900">
-                          {data.response}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
+            <div>
+              <h3 className="text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-tertiary)] mb-3 flex items-center gap-2">
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
+                Common Objections & Responses
+              </h3>
+              <div className="space-y-2">
+                {objections.map(([objection, data]: [string, any]) => (
+                  <div key={objection}>
+                    <button
+                      onClick={() =>
+                        setActiveObjection(
+                          activeObjection === objection ? null : objection
+                        )
+                      }
+                      className="w-full text-left p-3 rounded-[4px] border border-[var(--ods-border)] hover:border-[var(--ods-brand-500)] hover:bg-[var(--ods-bg-primary)] transition text-[12px]"
+                    >
+                      <span className="font-medium text-[var(--ods-text-primary)]">"{objection}"</span>
+                      <span className="text-[11px] text-[var(--ods-text-tertiary)] ml-2">{data.category}</span>
+                    </button>
+                    {activeObjection === objection && (
+                      <div className="mt-1 p-3 bg-[var(--ods-bg-primary)] rounded-[4px] border border-[var(--ods-brand-200)] text-[12px] text-[var(--ods-text-primary)]">
+                        {data.response}
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
           </div>
-        </div>
+        </WidgetCard>
       )}
-    </div>
+    </PageCanvas>
   );
 }
