@@ -8,11 +8,11 @@ import {
   Keyboard,
   Clock,
   RotateCcw,
-  Inbox,
-  X,
   Check,
 } from "lucide-react";
 import { getSipConfig, isSipConfigured, getSipDomain, getSipExtension } from "@/sip";
+import { Button } from "@/components/ui/Button";
+import { OutcomeSelect } from "@/components/common/OutcomeSelect";
 import type { Database } from "@/types/database";
 
 type Lead = Database["public"]["Tables"]["leads"]["Row"];
@@ -28,6 +28,9 @@ interface SoftphoneProps {
 }
 
 type CallState = "idle" | "connecting" | "ringing" | "active" | "on_hold" | "muted" | "ended";
+
+const FOCUS_RING =
+  "focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ods-brand-500)] focus-visible:outline-offset-1";
 
 export function Softphone({ lead, onCallEnd }: SoftphoneProps) {
   const [callState, setCallState] = useState<CallState>("idle");
@@ -275,14 +278,27 @@ export function Softphone({ lead, onCallEnd }: SoftphoneProps) {
     ended: "Call Ended",
   };
 
+  // Single semantic token per state — no gradients, no per-state background
+  // repaint. Twenty communicates call state with a small dot + label, the
+  // same pattern as StatusBadge, not by recoloring the whole panel.
+  const stateColor: Record<CallState, string> = {
+    idle: "var(--ods-text-tertiary)",
+    connecting: "var(--ods-brand-600)",
+    ringing: "var(--ods-brand-600)",
+    active: "var(--ods-success)",
+    on_hold: "var(--ods-warning)",
+    muted: "var(--ods-warning)",
+    ended: "var(--ods-danger)",
+  };
+
   if (!lead) {
     return (
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <div className="flex items-center justify-center h-48 text-gray-400">
+      <div className="bg-[var(--ods-bg-secondary)] border border-[var(--ods-border)] rounded-ods-md p-6">
+        <div className="flex items-center justify-center h-48 text-[var(--ods-text-tertiary)]">
           <div className="text-center">
             <Phone className="w-12 h-12 mx-auto mb-3 opacity-50" />
-            <p className="text-sm font-medium">Select a lead to start a call</p>
-            <p className="text-xs mt-1">Navigate to a lead detail page and use the dialer</p>
+            <p className="text-[13px] font-medium">Select a lead to start a call</p>
+            <p className="text-[11px] mt-1">Navigate to a lead detail page and use the dialer</p>
           </div>
         </div>
       </div>
@@ -291,194 +307,191 @@ export function Softphone({ lead, onCallEnd }: SoftphoneProps) {
 
   return (
     <>
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      <div className={`px-5 py-4 ${
-        callState === "active"
-          ? "bg-gradient-to-r from-green-600 to-green-700"
-          : callState === "ended"
-          ? "bg-gradient-to-r from-red-600 to-red-700"
-          : "bg-gradient-to-r from-brand-600 to-brand-700"
-      }`}>
-        <div className="flex items-center gap-4">
-          <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
-            <Phone className="w-5 h-5 text-white" />
+      <div className="bg-[var(--ods-bg-secondary)] border border-[var(--ods-border)] rounded-ods-md overflow-hidden">
+        {/* 40px header, flat — matches PageCanvas/WidgetCard, no state-based repaint */}
+        <div className="h-10 min-h-[40px] px-4 border-b border-[var(--ods-border)] flex items-center gap-3">
+          <div className="w-6 h-6 rounded-full bg-[var(--ods-bg-tertiary)] flex items-center justify-center shrink-0">
+            <Phone className="w-3.5 h-3.5 text-[var(--ods-text-secondary)]" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-white font-semibold truncate">
+            <p className="text-[13px] font-semibold text-[var(--ods-text-primary)] truncate">
               {lead.first_name} {lead.last_name}
             </p>
-            <p className="text-white/80 text-sm truncate">{lead.company ?? lead.email ?? "No contact info"}</p>
           </div>
-          <div className="text-right">
-            {callState !== "idle" ? (
-              <>
-                <div className="flex items-center gap-1 text-white text-sm">
-                  <Clock className="w-3.5 h-3.5" />
-                  <span>{formatDuration(duration)}</span>
-                </div>
-                <div className={`w-2 h-2 rounded-full mt-1 ${
-                  callState === "active" ? "bg-green-400 animate-pulse" :
-                  callState === "on_hold" || callState === "muted" ? "bg-yellow-400" :
-                  callState === "ended" ? "bg-red-400" :
-                  "bg-white/60 animate-pulse"
-                }`} />
-              </>
-            ) : (
-              <span className="text-white/60 text-xs">Ready</span>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {callState !== "idle" && (
+              <span className="flex items-center gap-1 text-[11px] text-[var(--ods-text-tertiary)]">
+                <Clock className="w-3 h-3" />
+                {formatDuration(duration)}
+              </span>
             )}
+            <span
+              className={`w-1.5 h-1.5 rounded-full ${
+                callState === "active" || callState === "connecting" || callState === "ringing"
+                  ? "animate-pulse"
+                  : ""
+              }`}
+              style={{ backgroundColor: stateColor[callState] }}
+            />
           </div>
         </div>
-      </div>
 
-      <div className="p-5 space-y-5">
-        <div className="text-center">
-          <p className="text-2xl font-semibold text-gray-900">{phoneNumber || "—"}</p>
-          <p className={`text-xs mt-1 font-medium ${
-            callState === "active" ? "text-green-600" :
-            callState === "ended" ? "text-red-600" :
-            callState === "on_hold" || callState === "muted" ? "text-amber-600" :
-            "text-gray-400"
-          }`}>{stateLabel[callState]}</p>
-        </div>
+        <div className="p-4 flex flex-col gap-4">
+          <p className="text-[12px] text-[var(--ods-text-tertiary)] truncate -mt-1">
+            {lead.company ?? lead.email ?? "No contact info"}
+          </p>
 
-        <div className="flex items-center justify-center gap-4">
-          {callState === "idle" || callState === "ended" ? (
-            <>
+          <div className="text-center">
+            <p className="text-[18px] font-semibold text-[var(--ods-text-primary)]">{phoneNumber || "—"}</p>
+            <p className="text-[11px] mt-1 font-medium" style={{ color: stateColor[callState] }}>
+              {stateLabel[callState]}
+            </p>
+          </div>
+
+          <div className="flex items-center justify-center gap-4">
+            {callState === "idle" || callState === "ended" ? (
               <button
                 onClick={callState === "ended" ? handleRedial : startCall}
                 disabled={!phoneNumber}
-                className="w-14 h-14 rounded-full bg-green-500 hover:bg-green-600 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center text-white shadow-lg shadow-green-500/30 transition hover:scale-105"
+                className={`w-14 h-14 rounded-full bg-[var(--ods-success)] hover:bg-[#15803d] disabled:bg-[var(--ods-bg-tertiary)] disabled:text-[var(--ods-text-tertiary)] disabled:cursor-not-allowed flex items-center justify-center text-white transition ${FOCUS_RING}`}
               >
-                {callState === "ended" ? (
-                  <RotateCcw className="w-6 h-6" />
-                ) : (
-                  <Phone className="w-6 h-6" />
-                )}
+                {callState === "ended" ? <RotateCcw className="w-6 h-6" /> : <Phone className="w-6 h-6" />}
               </button>
-            </>
-          ) : (
-            <>
-              <button
-                onClick={endCall}
-                className="w-14 h-14 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center text-white shadow-lg shadow-red-500/30 transition hover:scale-105"
-              >
-                <PhoneOff className="w-6 h-6" />
-              </button>
-              <button
-                onClick={toggleMute}
-                disabled={callState === "on_hold"}
-                className={`w-10 h-10 rounded-full flex items-center justify-center transition hover:scale-105 ${
-                  callState === "muted" ? "bg-red-100 text-red-600" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                }`}
-              >
-                {callState === "muted" ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
-              </button>
-              <button
-                onClick={toggleHold}
-                className={`w-10 h-10 rounded-full flex items-center justify-center transition hover:scale-105 ${
-                  callState === "on_hold" ? "bg-amber-100 text-amber-600" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                }`}
-              >
-                <Headphones className="w-5 h-5" />
-              </button>
-            </>
-          )}
-        </div>
-
-        <div className="flex justify-center">
-          <button
-            onClick={() => setKeypadVisible(!keypadVisible)}
-            className={`p-2 rounded-lg transition ${keypadVisible ? "bg-brand-100 text-brand-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
-          >
-            <Keyboard className="w-4 h-4" />
-          </button>
-        </div>
-
-        {keypadVisible && (
-          <div className="grid grid-cols-3 gap-2 max-w-[200px] mx-auto">
-            {keypadKeys.flat().map((key) => (
-              <button
-                key={key}
-                onClick={() => setDialNumber((prev) => prev + key)}
-                className="w-full aspect-square flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded-lg text-lg font-semibold text-gray-800 transition"
-              >
-                {key}
-              </button>
-            ))}
+            ) : (
+              <>
+                <button
+                  onClick={endCall}
+                  className={`w-14 h-14 rounded-full bg-[var(--ods-danger)] hover:bg-[#b91c1c] flex items-center justify-center text-white transition ${FOCUS_RING}`}
+                >
+                  <PhoneOff className="w-6 h-6" />
+                </button>
+                <button
+                  onClick={toggleMute}
+                  disabled={callState === "on_hold"}
+                  className={`w-10 h-10 rounded-full flex items-center justify-center transition ${FOCUS_RING} ${
+                    callState === "muted"
+                      ? "bg-red-500/10 text-red-600"
+                      : "bg-[var(--ods-bg-tertiary)] text-[var(--ods-text-secondary)] hover:bg-[var(--ods-border)]"
+                  }`}
+                >
+                  {callState === "muted" ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+                </button>
+                <button
+                  onClick={toggleHold}
+                  className={`w-10 h-10 rounded-full flex items-center justify-center transition ${FOCUS_RING} ${
+                    callState === "on_hold"
+                      ? "bg-amber-500/10 text-amber-600"
+                      : "bg-[var(--ods-bg-tertiary)] text-[var(--ods-text-secondary)] hover:bg-[var(--ods-border)]"
+                  }`}
+                >
+                  <Headphones className="w-5 h-5" />
+                </button>
+              </>
+            )}
           </div>
-        )}
 
-        <div className="border-t border-gray-100 pt-4 space-y-3">
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Outcome</label>
-            <select
-              value={outcome}
-              onChange={(e) => setOutcome(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none bg-white"
+          <div className="flex justify-center">
+            <button
+              onClick={() => setKeypadVisible(!keypadVisible)}
+              className={`p-2 rounded-ods-sm transition ${FOCUS_RING} ${
+                keypadVisible
+                  ? "bg-[var(--ods-brand-100)] text-[var(--ods-brand-700)]"
+                  : "bg-[var(--ods-bg-tertiary)] text-[var(--ods-text-secondary)] hover:bg-[var(--ods-border)]"
+              }`}
             >
-              <option value="no_answer">No Answer</option>
-              <option value="answered">Answered</option>
-              <option value="busy">Busy</option>
-              <option value="voicemail">Voicemail</option>
-              <option value="dnc">DNC</option>
-              <option value="wrong_number">Wrong Number</option>
-              <option value="disconnected">Disconnected</option>
-            </select>
+              <Keyboard className="w-4 h-4" />
+            </button>
           </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Notes</label>
-            <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none resize-none"
-              placeholder="Add call notes..."
-            />
+
+          {keypadVisible && (
+            <div className="grid grid-cols-3 gap-2 max-w-[200px] mx-auto">
+              {keypadKeys.flat().map((key) => (
+                <button
+                  key={key}
+                  onClick={() => setDialNumber((prev) => prev + key)}
+                  className={`w-full aspect-square flex items-center justify-center bg-[var(--ods-bg-tertiary)] hover:bg-[var(--ods-border)] rounded-ods-sm text-[16px] font-semibold text-[var(--ods-text-primary)] transition ${FOCUS_RING}`}
+                >
+                  {key}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="border-t border-[var(--ods-border)] pt-4 flex flex-col gap-3">
+            <div>
+              <label className="block text-[11px] font-medium text-[var(--ods-text-tertiary)] mb-1">Outcome</label>
+              <OutcomeSelect
+                value={outcome}
+                onChange={(value) => setOutcome(value)}
+                disabled={callState !== "ended"}
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-[var(--ods-text-tertiary)] mb-1">Notes</label>
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={3}
+                className="ods-input resize-none"
+                placeholder="Add call notes..."
+              />
+            </div>
+            <Button
+              variant="primary"
+              size="lg"
+              onClick={handleSaveOutcome}
+              disabled={callState !== "ended"}
+              className="w-full"
+            >
+              Save & Next
+            </Button>
           </div>
-          <button
-            onClick={handleSaveOutcome}
-            disabled={callState !== "ended"}
-            className="w-full py-2.5 text-sm font-semibold text-white bg-brand-600 hover:bg-brand-700 disabled:bg-gray-300 disabled:cursor-not-allowed rounded-lg transition"
-          >
-            Save & Next
-          </button>
         </div>
       </div>
-    </div>
-    {incomingCall && (
-      <IncomingCallBanner
-        callerName={incomingCall.callerName}
-        callerNumber={incomingCall.callerNumber}
-        onAccept={handleAcceptIncomingCall}
-        onReject={handleRejectIncomingCall}
-      />
-    )}
+      {incomingCall && (
+        <IncomingCallBanner
+          callerName={incomingCall.callerName}
+          callerNumber={incomingCall.callerNumber}
+          onAccept={handleAcceptIncomingCall}
+          onReject={handleRejectIncomingCall}
+        />
+      )}
     </>
   );
 }
 
-function IncomingCallBanner({ callerName, callerNumber, onAccept, onReject }: { callerName: string; callerNumber: string; onAccept: () => void; onReject: () => void }) {
+function IncomingCallBanner({
+  callerName,
+  callerNumber,
+  onAccept,
+  onReject,
+}: {
+  callerName: string;
+  callerNumber: string;
+  onAccept: () => void;
+  onReject: () => void;
+}) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6 text-center space-y-4">
-        <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto animate-pulse">
-          <Phone className="w-8 h-8 text-green-600" />
+      <div className="bg-[var(--ods-bg-primary)] border border-[var(--ods-border)] rounded-ods-lg max-w-sm w-full p-6 text-center flex flex-col gap-4">
+        <div className="w-16 h-16 rounded-full bg-emerald-500/10 flex items-center justify-center mx-auto animate-pulse">
+          <Phone className="w-8 h-8 text-[var(--ods-success)]" />
         </div>
         <div>
-          <h3 className="text-lg font-semibold text-gray-900">Incoming Call</h3>
-          <p className="text-sm text-gray-600">{callerName || "Unknown"}</p>
-          <p className="text-sm text-gray-500">{callerNumber}</p>
+          <h3 className="text-[16px] font-semibold text-[var(--ods-text-primary)]">Incoming Call</h3>
+          <p className="text-[13px] text-[var(--ods-text-secondary)]">{callerName || "Unknown"}</p>
+          <p className="text-[13px] text-[var(--ods-text-tertiary)]">{callerNumber}</p>
         </div>
         <div className="flex items-center justify-center gap-6">
           <button
             onClick={onReject}
-            className="w-14 h-14 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center text-white shadow-lg shadow-red-500/30 transition"
+            className={`w-14 h-14 rounded-full bg-[var(--ods-danger)] hover:bg-[#b91c1c] flex items-center justify-center text-white transition ${FOCUS_RING}`}
           >
             <PhoneOff className="w-6 h-6" />
           </button>
           <button
             onClick={onAccept}
-            className="w-14 h-14 rounded-full bg-green-500 hover:bg-green-600 flex items-center justify-center text-white shadow-lg shadow-green-500/30 transition"
+            className={`w-14 h-14 rounded-full bg-[var(--ods-success)] hover:bg-[#15803d] flex items-center justify-center text-white transition ${FOCUS_RING}`}
           >
             <Check className="w-6 h-6" />
           </button>
