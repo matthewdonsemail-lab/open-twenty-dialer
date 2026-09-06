@@ -314,7 +314,7 @@ export function Softphone({ lead, onCallEnd }: SoftphoneProps) {
               <>
                 <div className="flex items-center gap-1 text-white text-sm">
                   <Clock className="w-3.5 h-3.5" />
-                  <span className="font-mono">{formatDuration(duration)}</span>
+                  <span>{formatDuration(duration)}</span>
                 </div>
                 <div className={`w-2 h-2 rounded-full mt-1 ${
                   callState === "active" ? "bg-green-400 animate-pulse" :
@@ -332,7 +332,7 @@ export function Softphone({ lead, onCallEnd }: SoftphoneProps) {
 
       <div className="p-5 space-y-5">
         <div className="text-center">
-          <p className="text-2xl font-mono font-semibold text-gray-900">{phoneNumber || "—"}</p>
+          <p className="text-2xl font-semibold text-gray-900">{phoneNumber || "—"}</p>
           <p className={`text-xs mt-1 font-medium ${
             callState === "active" ? "text-green-600" :
             callState === "ended" ? "text-red-600" :
@@ -467,7 +467,7 @@ function IncomingCallBanner({ callerName, callerNumber, onAccept, onReject }: { 
         <div>
           <h3 className="text-lg font-semibold text-gray-900">Incoming Call</h3>
           <p className="text-sm text-gray-600">{callerName || "Unknown"}</p>
-          <p className="text-sm font-mono text-gray-500">{callerNumber}</p>
+          <p className="text-sm text-gray-500">{callerNumber}</p>
         </div>
         <div className="flex items-center justify-center gap-6">
           <button

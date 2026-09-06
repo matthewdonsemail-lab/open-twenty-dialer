@@ -12,6 +12,7 @@
     "deploy": "cp -r dist/* ../hostinger/"
   },
   "dependencies": {
+    "@floating-ui/react": "^0.27.20",
     "@tanstack/react-query": "^5.101.4",
     "@tanstack/react-query-devtools": "^5.101.4",
     "clsx": "^2.1.1",

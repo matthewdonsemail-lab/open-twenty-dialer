@@ -96,7 +96,7 @@ export function CampaignForm({ onClose, onSubmit, initialData }: CampaignFormPro
             value={settingsText}
             onChange={(e) => setSettingsText(e.target.value)}
             rows={4}
-            className={`w-full px-3 py-2 border rounded-lg text-sm font-mono focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none resize-none ${
+            className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none resize-none ${
               settingsError ? 'border-red-300 bg-red-50' : 'border-gray-300'
             }`}
           />

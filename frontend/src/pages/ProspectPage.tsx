@@ -2,11 +2,14 @@ import React, { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/apiClient";
-import { StatusBadge } from "@/components/common/StatusBadge";
+import { StatusSelect } from "@/components/common/StatusSelect";
+import { RecordIndexCommandMenu } from "@/components/common/RecordIndexCommandMenu";
+import { ColumnVisibilityDropdown, ColumnDef } from "@/components/common/ColumnVisibilityDropdown";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { LeadForm } from "@/components/leads/LeadForm";
 import { CsvImport } from "@/components/leads/CsvImport";
-import { Search, Plus, Mail, Phone, MoreHorizontal, RefreshCw } from "lucide-react";
+import { useToast } from "@/components/ui/Toast";
+import { Mail, Phone, MoreHorizontal, RefreshCw } from "lucide-react";
 
 type StatusFilter = string | "all";
 
@@ -29,6 +32,7 @@ interface Prospect {
 export function ProspectPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { success, error: toastError } = useToast();
 
   const { data: prospects, isLoading, refetch } = useQuery<Prospect[]>({
     queryKey: ["prospects"],
@@ -43,15 +47,27 @@ export function ProspectPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [columns, setColumns] = useState<ColumnDef[]>([
+    { key: 'name', label: 'Name', visible: true },
+    { key: 'company', label: 'Company', visible: true },
+    { key: 'phone', label: 'Phone', visible: true },
+    { key: 'status', label: 'Status', visible: true },
+    { key: 'source', label: 'Source', visible: true },
+  ]);
+
+  const isVisible = (key: string) => columns.find(c => c.key === key)?.visible ?? true;
+
+  const handleColumnToggle = (key: string, visible: boolean) => {
+    setColumns(prev => prev.map(c => c.key === key ? { ...c, visible } : c));
+  };
 
   const filteredProspects = useMemo(() => {
     if (!prospects) return [];
     return prospects.filter((prospect) => {
-      const matchesStatus =
-        statusFilter === "all" || prospect.status === statusFilter;
+      const matchesStatus = statusFilter === "all" || prospect.status === statusFilter;
       const q = searchQuery.toLowerCase();
-      const matchesSearch =
-        !q ||
+      const matchesSearch = !q ||
         `${prospect.first_name ?? ""} ${prospect.last_name ?? ""}`.toLowerCase().includes(q) ||
         (prospect.company ?? "").toLowerCase().includes(q) ||
         (prospect.phone ?? "").includes(q) ||
@@ -62,14 +78,20 @@ export function ProspectPage() {
 
   async function handleDelete() {
     if (!deleteConfirm) return;
-    await api.prospects.delete(deleteConfirm.id);
-    queryClient.invalidateQueries({ queryKey: ["prospects"] });
-    setDeleteConfirm(null);
+    try {
+      await api.prospects.delete(deleteConfirm.id);
+      queryClient.invalidateQueries({ queryKey: ["prospects"] });
+      setDeleteConfirm(null);
+      success("Prospect deleted", `${deleteConfirm.name} has been removed from the list`);
+    } catch (err) {
+      toastError("Error", "Failed to delete the prospect");
+    }
   }
 
   async function handleStatusChange(prospectId: string, newStatus: string) {
     await api.prospects.update(prospectId, { status: newStatus as any });
     queryClient.invalidateQueries({ queryKey: ["prospects"] });
+    success("Status updated", `Status changed to "${newStatus}"`);
   }
 
   async function handleSyncFromTwenty() {
@@ -84,53 +106,113 @@ export function ProspectPage() {
         },
       });
       
-      // Log detailed response info
-      console.log("[sync] Response status:", res.status);
-      const text = await res.text();
-      console.log("[sync] Response body:", text);
-      
       if (!res.ok) {
-        throw new Error(`Sync failed (${res.status}): ${text}`);
+        throw new Error(`Sync failed (${res.status}): ${await res.text()}`);
       }
       
-      const data = JSON.parse(text);
-      console.log("[sync] Sync result:", data);
-      
       await queryClient.invalidateQueries({ queryKey: ["prospects"] });
+      success("Sync complete", "Prospects synced from Twenty");
     } catch (err: any) {
-      console.error("[sync] Full error:", err);
-      alert(`Sync error: ${err.message || String(err)}`);
+      toastError("Erreur de sync", err.message || "Impossible de synchroniser");
     } finally {
       setSyncing(false);
     }
   }
 
+  async function handleBulkStatusChange(newStatus: string) {
+    try {
+      await Promise.all(Array.from(selectedIds).map(id =>
+        api.prospects.update(id, { status: newStatus as any })
+      ));
+      setSelectedIds(new Set());
+      queryClient.invalidateQueries({ queryKey: ["prospects"] });
+      success("Status updated", `${selectedIds.size} prospect(s) updated`);
+    } catch (err) {
+      toastError("Erreur", "Impossible de mettre à jour les prospects");
+    }
+  }
+
+  async function handleBulkDelete() {
+    try {
+      await Promise.all(Array.from(selectedIds).map(id => api.prospects.delete(id)));
+      setSelectedIds(new Set());
+      queryClient.invalidateQueries({ queryKey: ["prospects"] });
+      success("Deleted", `${selectedIds.size} prospect(s) deleted`);
+    } catch (err) {
+      toastError("Error", "Failed to delete prospects");
+    }
+  }
+
+  async function handleBulkEdit() {
+    // Future: open a modal for batch edit
+  }
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filteredProspects.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredProspects.map(p => p.id)));
+    }
+  };
+
+  const toggleRow = (id: string) => {
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelectedIds(next);
+  };
+
+  const isAllSelected = filteredProspects.length > 0 && selectedIds.size === filteredProspects.length;
+
   return (
     <div className="flex flex-col h-full w-full select-none bg-[var(--ods-bg-primary)]">
-      {/* Twenty-style 40px Action Bar */}
+      {/* Twenty-style Action Bar */}
       <div className="h-10 px-3 flex items-center justify-between border-b border-[var(--ods-border)] shrink-0">
-        <div className="flex items-center gap-2">
-          <span className="text-[13px] font-semibold text-[var(--ods-text-primary)]">All Prospects</span>
-          <span className="text-[11px] font-medium text-[var(--ods-text-secondary)] px-1.5 py-0.5 rounded-[4px] bg-[var(--ods-bg-secondary)] border border-[var(--ods-border)]">
-            {prospects?.length ?? 0}
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleSyncFromTwenty}
-            disabled={syncing}
-            className="h-7 px-2.5 rounded-[6px] text-[12px] font-medium border border-[var(--ods-border)] text-[var(--ods-text-primary)] hover:bg-[var(--ods-bg-secondary)] transition-colors flex items-center gap-1 disabled:opacity-50"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${syncing ? "animate-spin" : ""}`} />
-            Sync
-          </button>
-          <button
-            onClick={() => setShowForm(true)}
-            className="h-7 px-2.5 rounded-[6px] text-[12px] font-medium bg-[var(--ods-brand-600)] text-white hover:opacity-90 transition-opacity flex items-center gap-1"
-          >
-            + New prospect
-          </button>
-        </div>
+        {selectedIds.size > 0 ? (
+          <>
+            <div className="flex items-center gap-2">
+              <span className="text-[13px] font-semibold text-[var(--ods-text-primary)]">Prospects</span>
+              <span className="text-[11px] font-medium text-[var(--ods-text-secondary)] px-1.5 py-0.5 rounded-[4px] bg-[var(--ods-bg-secondary)] border border-[var(--ods-border)]">
+                {selectedIds.size} selected
+              </span>
+            </div>
+            <RecordIndexCommandMenu
+              selectedCount={selectedIds.size}
+              onClear={() => setSelectedIds(new Set())}
+              onDelete={handleBulkDelete}
+              onEdit={handleBulkEdit}
+            />
+          </>
+        ) : (
+          <>
+            <div className="flex items-center gap-2">
+              <span className="text-[13px] font-semibold text-[var(--ods-text-primary)]">All Prospects</span>
+              <span className="text-[11px] font-medium text-[var(--ods-text-secondary)] px-1.5 py-0.5 rounded-[4px] bg-[var(--ods-bg-secondary)] border border-[var(--ods-border)]">
+                {filteredProspects.length}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <ColumnVisibilityDropdown
+                columns={columns}
+                onChange={handleColumnToggle}
+              />
+              <button
+                onClick={handleSyncFromTwenty}
+                disabled={syncing}
+                className="h-7 px-2.5 rounded-[6px] text-[12px] font-medium border border-[var(--ods-border)] text-[var(--ods-text-primary)] hover:bg-[var(--ods-bg-secondary)] transition-colors flex items-center gap-1 disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${syncing ? "animate-spin" : ""}`} />
+                Sync
+              </button>
+              <button
+                onClick={() => setShowForm(true)}
+                className="h-7 px-2.5 rounded-[6px] text-[12px] font-medium bg-[var(--ods-brand-600)] text-white hover:opacity-90 transition-opacity flex items-center gap-1"
+              >
+                + New prospect
+              </button>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Flush Full-Bleed Table */}
@@ -139,13 +221,18 @@ export function ProspectPage() {
           <thead className="sticky top-0 bg-[var(--ods-bg-secondary)] z-10">
             <tr className="h-8 border-b border-[var(--ods-border)]">
               <th className="w-8 px-2 text-center">
-                <input type="checkbox" className="rounded-[3px] border-[var(--ods-border)] accent-[var(--ods-brand-600)]" />
+                <input
+                  type="checkbox"
+                  checked={isAllSelected}
+                  onChange={toggleSelectAll}
+                  className="rounded-[3px] border-[var(--ods-border)] accent-[var(--ods-brand-600)]"
+                />
               </th>
-              <th className="px-3 text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-secondary)]">Name</th>
-              <th className="px-3 text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-secondary)]">Company</th>
-              <th className="px-3 text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-secondary)]">Phone</th>
-              <th className="px-3 text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-secondary)]">Status</th>
-              <th className="px-3 text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-secondary)]">Source</th>
+              {isVisible('name') && <th className="px-3 text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-secondary)]">Name</th>}
+              {isVisible('company') && <th className="px-3 text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-secondary)]">Company</th>}
+              {isVisible('phone') && <th className="px-3 text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-secondary)]">Phone</th>}
+              {isVisible('status') && <th className="px-3 text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-secondary)]">Status</th>}
+              {isVisible('source') && <th className="px-3 text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-secondary)]">Source</th>}
               <th className="w-16 px-3 text-right text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-secondary)]">Actions</th>
             </tr>
           </thead>
@@ -163,37 +250,43 @@ export function ProspectPage() {
                 </td>
               </tr>
             ) : filteredProspects.map((prospect) => (
-              <tr key={prospect.id} className="h-8 hover:bg-[var(--ods-bg-secondary)] transition-colors group">
+              <tr key={prospect.id} className={`h-8 transition-colors ${selectedIds.has(prospect.id) ? 'bg-[var(--ods-bg-secondary)]' : 'hover:bg-[var(--ods-bg-secondary)]'}`}>
                 <td className="w-8 px-2 text-center">
-                  <input type="checkbox" className="rounded-[3px] border-[var(--ods-border)] accent-[var(--ods-brand-600)] opacity-0 group-hover:opacity-100 focus:opacity-100" />
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(prospect.id)}
+                    onChange={() => toggleRow(prospect.id)}
+                    className="rounded-[3px] border-[var(--ods-border)] accent-[var(--ods-brand-600)]"
+                  />
                 </td>
-                <td className="px-3 text-[13px] font-medium text-[var(--ods-text-primary)] truncate max-w-[200px] cursor-pointer hover:text-[var(--ods-brand-600)]" onClick={() => navigate(`/leads/${prospect.id}`)}>
-                  {prospect.first_name} {prospect.last_name}
-                </td>
-                <td className="px-3 text-[13px] text-[var(--ods-text-secondary)] truncate max-w-[180px]">{prospect.company ?? "—"}</td>
-                <td className="px-3 text-[13px] text-[var(--ods-text-secondary)] font-mono">{prospect.phone ?? "—"}</td>
-                <td className="px-3">
-                  <select
-                    value={prospect.status}
-                    onChange={(e) => handleStatusChange(prospect.id, e.target.value)}
-                    className="text-[11px] font-medium bg-transparent border-none cursor-pointer text-[var(--ods-text-primary)] focus:ring-0"
-                  >
-                    <option value="new">New</option>
-                    <option value="contacted">Contacted</option>
-                    <option value="interested">Interested</option>
-                    <option value="not_interested">Not Interested</option>
-                    <option value="callback">Callback</option>
-                    <option value="converted">Converted</option>
-                    <option value="do_not_contact">DNC</option>
-                  </select>
-                </td>
-                <td className="px-3 text-[13px] text-[var(--ods-text-secondary)]">
-                  <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] text-[11px] font-medium bg-[var(--ods-bg-secondary)] border border-[var(--ods-border)] text-[var(--ods-text-primary)]">
-                    {prospect.source || "Twenty"}
-                  </span>
-                </td>
+                {isVisible('name') && (
+                  <td className="px-3 text-[13px] font-medium text-[var(--ods-text-primary)] truncate max-w-[200px] cursor-pointer hover:text-[var(--ods-brand-600)]" onClick={() => navigate(`/prospects/${prospect.id}`)}>
+                    {prospect.first_name} {prospect.last_name}
+                  </td>
+                )}
+                {isVisible('company') && (
+                  <td className="px-3 text-[13px] text-[var(--ods-text-secondary)] truncate max-w-[180px]">{prospect.company ?? "—"}</td>
+                )}
+                {isVisible('phone') && (
+                  <td className="px-3 text-[13px] text-[var(--ods-text-secondary)] font-mono">{prospect.phone ?? "—"}</td>
+                )}
+                {isVisible('status') && (
+                  <td className="px-3">
+                    <StatusSelect
+                      value={prospect.status}
+                      onChange={(newStatus) => handleStatusChange(prospect.id, newStatus)}
+                    />
+                  </td>
+                )}
+                {isVisible('source') && (
+                  <td className="px-3 text-[13px] text-[var(--ods-text-secondary)]">
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] text-[11px] font-medium bg-[var(--ods-bg-secondary)] border border-[var(--ods-border)] text-[var(--ods-text-primary)]">
+                      {prospect.source || "Twenty"}
+                    </span>
+                  </td>
+                )}
                 <td className="w-16 px-3 text-right">
-                  <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex items-center justify-end gap-1">
                     <a href={`tel:${prospect.phone}`} className="p-1 text-[var(--ods-text-secondary)] hover:text-[var(--ods-brand-600)]" title="Call">
                       <Phone className="w-3.5 h-3.5" />
                     </a>
@@ -220,6 +313,7 @@ export function ProspectPage() {
             await api.prospects.create(data as any);
             queryClient.invalidateQueries({ queryKey: ["prospects"] });
             setShowForm(false);
+            success("Prospect created", `${data.first_name} ${data.last_name} has been added`);
           }}
         />
       )}
@@ -233,6 +327,7 @@ export function ProspectPage() {
             }
             queryClient.invalidateQueries({ queryKey: ["prospects"] });
             setShowCsvImport(false);
+            success("Import complete", `${rows.length} prospect(s) imported`);
           }}
         />
       )}

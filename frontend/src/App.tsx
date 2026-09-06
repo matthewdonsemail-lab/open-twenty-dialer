@@ -3,12 +3,14 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { Layout } from "@/components/common/Layout";
 import { ErrorBoundary } from "@/components/common/ErrorBoundary";
+import { ToastProvider } from "@/components/ui/Toast";
 
 const LoginPage = React.lazy(() => import("@/pages/LoginPage").then((m) => ({ default: m.LoginPage })));
 const SignupPage = React.lazy(() => import("@/pages/SignupPage").then((m) => ({ default: m.SignupPage })));
 const DashboardPage = React.lazy(() => import("@/pages/DashboardPage").then((m) => ({ default: m.DashboardPage })));
 const LeadsPage = React.lazy(() => import("@/pages/LeadsPage").then((m) => ({ default: m.LeadsPage })));
 const ProspectPage = React.lazy(() => import("@/pages/ProspectPage").then((m) => ({ default: m.ProspectPage })));
+const ProspectDetailPage = React.lazy(() => import("@/pages/ProspectDetailPage").then((m) => ({ default: m.ProspectDetailPage })));
 const LeadDetailPage = React.lazy(() => import("@/pages/LeadDetailPage").then((m) => ({ default: m.LeadDetailPage })));
 const CampaignPage = React.lazy(() => import("@/pages/CampaignPage").then((m) => ({ default: m.CampaignPage })));
 const CallHistoryPage = React.lazy(() => import("@/pages/CallHistoryPage").then((m) => ({ default: m.CallHistoryPage })));
@@ -55,6 +57,7 @@ function AppRoutes() {
                   <Route path="leads" element={<LeadsPage />} />
                   <Route path="prospects" element={<ProspectPage />} />
                   <Route path="leads/:leadId" element={<LeadDetailPage />} />
+                  <Route path="prospects/:prospectId" element={<ProspectDetailPage />} />
                   <Route path="campaigns" element={<CampaignPage />} />
                   <Route path="scripts" element={<ScriptsPage />} />
                   <Route path="history" element={<CallHistoryPage />} />
@@ -72,7 +75,9 @@ function AppRoutes() {
 export default function App() {
   return (
     <ErrorBoundary>
-      <AppRoutes />
+      <ToastProvider>
+        <AppRoutes />
+      </ToastProvider>
     </ErrorBoundary>
   );
 }

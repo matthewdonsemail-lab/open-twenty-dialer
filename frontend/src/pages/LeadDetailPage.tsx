@@ -158,7 +158,7 @@ export function LeadDetailPage() {
                   <div key={log.id} className="border-l-2 border-brand-300 pl-3 py-2">
                     <div className="flex items-center justify-between">
                       <StatusBadge status={log.outcome} />
-                      <span className="text-xs text-gray-400 font-mono">{log.duration_seconds}s</span>
+                      <span className="text-xs text-gray-400">{log.duration_seconds}s</span>
                     </div>
                     {log.notes && <p className="text-xs text-gray-500 mt-1">{log.notes}</p>}
                     <p className="text-xs text-gray-400 mt-1">{new Date(log.created_at).toLocaleString()}</p>
