@@ -9,7 +9,8 @@ import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { LeadForm } from "@/components/leads/LeadForm";
 import { CsvImport } from "@/components/leads/CsvImport";
 import { useToast } from "@/components/ui/Toast";
-import { Mail, Phone, MoreHorizontal, RefreshCw } from "lucide-react";
+import { Mail, Phone, RefreshCw } from "lucide-react";
+import { ActionsMenu } from "@/components/common/ActionsMenu";
 
 type StatusFilter = string | "all";
 
@@ -295,9 +296,12 @@ export function ProspectPage() {
                         <Mail className="w-3.5 h-3.5" />
                       </a>
                     )}
-                    <button onClick={() => setDeleteConfirm({ id: prospect.id, name: `${prospect.first_name} ${prospect.last_name}` })} className="p-1 text-[var(--ods-text-secondary)] hover:text-red-600" title="Delete">
-                      <MoreHorizontal className="w-3.5 h-3.5" />
-                    </button>
+                    <ActionsMenu
+                      leadId={prospect.id}
+                      leadName={`${prospect.first_name} ${prospect.last_name}`}
+                      onView={(id) => navigate(`/prospects/${id}`)}
+                      onDelete={(id, name) => setDeleteConfirm({ id, name })}
+                    />
                   </div>
                 </td>
               </tr>

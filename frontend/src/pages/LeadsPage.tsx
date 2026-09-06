@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useLeads } from "@/hooks/useLeads";
 import { useCreateLead, useDeleteLead, useUpdateLead } from "@/hooks/useLeads";
@@ -9,7 +9,8 @@ import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { LeadForm } from "@/components/leads/LeadForm";
 import { CsvImport } from "@/components/leads/CsvImport";
 import { useToast } from "@/components/ui/Toast";
-import { Mail, Phone, MoreHorizontal } from "lucide-react";
+import { Mail, Phone } from "lucide-react";
+import { ActionsMenu } from "@/components/common/ActionsMenu";
 
 type StatusFilter = string | "all";
 
@@ -26,6 +27,8 @@ export function LeadsPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
+  const [actionsMenuId, setActionsMenuId] = useState<string | null>(null);
+  const actionsMenuRef = useRef<HTMLDivElement>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [columns, setColumns] = useState<ColumnDef[]>([
     { key: 'name', label: 'Name', visible: true },
@@ -217,9 +220,12 @@ export function LeadsPage() {
                         <Mail className="w-3.5 h-3.5" />
                       </a>
                     )}
-                    <button onClick={() => setDeleteConfirm({ id: lead.id, name: `${lead.first_name} ${lead.last_name}` })} className="p-1 text-[var(--ods-text-secondary)] hover:text-red-600" title="Delete">
-                      <MoreHorizontal className="w-3.5 h-3.5" />
-                    </button>
+                    <ActionsMenu
+                      leadId={lead.id}
+                      leadName={`${lead.first_name} ${lead.last_name}`}
+                      onView={(id) => navigate(`/leads/${id}`)}
+                      onDelete={(id, name) => setDeleteConfirm({ id, name })}
+                    />
                   </div>
                 </td>
               </tr>
