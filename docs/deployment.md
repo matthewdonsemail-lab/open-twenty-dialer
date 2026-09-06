@@ -6,19 +6,23 @@
 
 ```bash
 # Clone and configure
-git clone https://github.com/6t9xstar/cold-dailer.git
-cd cold-dialer
+git clone https://github.com/matthewdonsemail-lab/open-twenty-dialer.git
+cd open-twenty-dialer
 cp .env.example .env.local
 
-# Generate a secure JWT secret
-JWT_SECRET=$(openssl rand -hex 32)
-echo "JWT_SECRET=$JWT_SECRET" >> .env.local
+# Configure environment
+echo "TWENTY_BASE_URL=https://your-twenty-instance.com" >> .env.local
+echo "TWENTY_API_KEY=your-api-key" >> .env.local
+echo "JWT_SECRET=$(openssl rand -hex 32)" >> .env.local
+
+# Optional: SIP configuration for softphone
+echo "VITE_SIP_URI=sip:your-extension@your-domain.sip.signalwire.com" >> frontend/.env.local
+echo "VITE_SIP_PASSWORD=your-password" >> frontend/.env.local
+echo "VITE_SIP_WS_URL=wss://your-domain.sip.signalwire.com" >> frontend/.env.local
+echo "VITE_SIP_CALLER_ID=+1XXXXXXXXXX" >> frontend/.env.local
 
 # Build and start
 docker compose up -d
-
-# Seed the database
-docker compose exec backend npm run seed
 
 # Access at http://localhost:3000
 ```
@@ -44,16 +48,15 @@ curl -fsSL https://get.docker.com -o get-docker.sh
 sh get-docker.sh
 
 # Clone project
-git clone https://github.com/6t9xstar/cold-dailer.git
-cd cold-dailer
+git clone https://github.com/matthewdonsemail-lab/open-twenty-dialer.git
+cd open-twenty-dialer
 
 # Configure
 cp .env.example .env.local
-nano .env.local  # Add your SIP credentials
+nano .env.local  # Add your Twenty credentials
 
 # Start
 docker compose up -d
-docker compose exec backend npm run seed
 ```
 
 ### Reverse Proxy (Nginx)
@@ -82,17 +85,30 @@ See [HOSTINGER_SETUP.md](../scripts/HOSTINGER_SETUP.md)
 ### Frontend (.env.local)
 | Variable | Required | Description |
 |----------|----------|-------------|
-| VITE_SUPABASE_URL | No | Supabase project URL |
-| VITE_SUPABASE_ANON_KEY | No | Supabase anonymous key |
+| VITE_API_URL | No | Backend API URL |
 | VITE_SIP_URI | No | SIP registration URI |
 | VITE_SIP_PASSWORD | No | SIP password |
 | VITE_SIP_WS_URL | No | WebSocket URL for SIP |
 | VITE_SIP_CALLER_ID | No | Outbound caller ID |
-| VITE_API_URL | No | Self-hosted backend URL |
 
-### Backend (environment)
+### Backend (.env.local)
 | Variable | Required | Description |
 |----------|----------|-------------|
 | PORT | No | Server port (default: 4000) |
 | JWT_SECRET | Yes | Secret for JWT tokens |
-| DATABASE_URL | No | SQLite database path |
+| TWENTY_BASE_URL | Yes | Your Twenty instance URL |
+| TWENTY_API_KEY | Yes | Twenty API key |
+| TWENTY_DATABASE_URL | Yes | PostgreSQL connection string |
+
+## SIP Configuration
+
+To make real calls, configure your SIP provider in `frontend/.env.local`:
+
+```env
+VITE_SIP_URI=sip:your-extension@your-domain.sip.signalwire.com
+VITE_SIP_PASSWORD=your-password
+VITE_SIP_WS_URL=wss://your-domain.sip.signalwire.com
+VITE_SIP_CALLER_ID=+1XXXXXXXXXX
+```
+
+See [SIP Providers Guide](sip-providers.md) for provider-specific setup.
