@@ -44,7 +44,6 @@ export function AdminPage() {
   return (
     <PageCanvas
       title="Administration"
-      maxWidth="4xl"
     >
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
         {[
