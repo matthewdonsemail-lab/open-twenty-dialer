@@ -12,28 +12,20 @@ Twenty uses a strict two-package separation:
 
 ## 1. Core Sizing Foundation: 4px Grid System
 
-Twenty bases spacing, heights, paddings, and margins on a predictable **4-pixel incremental grid**. Instead of arbitrary pixel values, sizing relies on CSS custom properties (reusable stylesheet variables prefixed with `--t-`) injected at the document root.
+Twenty bases spacing, heights, paddings, and margins on a predictable **4-pixel incremental grid**. Instead of arbitrary pixel values, sizing relies on CSS custom properties (reusable stylesheet variables prefixed with `--ods-`) injected at the document root.
 
 ### Spacing & Layout Scale
 
-The spacing scale is defined in:
-
-- [`packages/twenty-ui/src/theme-constants/theme-light.css`](https://github.com/twentyhq/twenty/blob/main/packages/twenty-ui/src/theme-constants/theme-light.css)
-- [`packages/twenty-ui/src/theme-constants/theme-dark.css`](https://github.com/twentyhq/twenty/blob/main/packages/twenty-ui/src/theme-constants/theme-dark.css)
-
 | Token | Value | Typical usage |
 |---|---:|---|
-| `--t-spacing-0-5` | `2px` | Micro-alignments, tag gaps, inline badges |
-| `--t-spacing-1` | `4px` | Inner button padding (small), compact icon gaps |
-| `--t-spacing-2` | `8px` | Standard input padding, table cell vertical rhythm |
-| `--t-spacing-3` | `12px` | Card padding, modal content separation |
-| `--t-spacing-4` | `16px` | Container gutters, sidebar section padding |
-| `--t-spacing-5` | `20px` | Page header padding |
-| `--t-spacing-6` | `24px` | Large panel margins |
-| `--t-spacing-8` | `32px` | Empty-state view wrappers |
-
-TypeScript bindings matching these variables live in
-[`packages/twenty-ui/src/theme-constants/themeCssVariables.ts`](https://github.com/twentyhq/twenty/blob/main/packages/twenty-ui/src/theme-constants/themeCssVariables.ts).
+| `--ods-spacing-0-5` | `2px` | Micro-alignments, tag gaps, inline badges |
+| `--ods-spacing-1` | `4px` | Inner button padding (small), compact icon gaps |
+| `--ods-spacing-2` | `8px` | Standard input padding, table cell vertical rhythm |
+| `--ods-spacing-3` | `12px` | Card padding, modal content separation |
+| `--ods-spacing-4` | `16px` | Container gutters, sidebar section padding |
+| `--ods-spacing-5` | `20px` | Page header padding |
+| `--ods-spacing-6` | `24px` | Large panel margins |
+| `--ods-spacing-8` | `32px` | Empty-state view wrappers |
 
 ---
 
@@ -43,35 +35,23 @@ To preserve dense data visibility across large records and CRM tables, Twenty st
 
 ### Buttons and Inputs
 
-See the implementation in
-[`packages/twenty-ui/src/input/Button/Button.module.scss`](https://github.com/twentyhq/twenty/blob/main/packages/twenty-ui/src/input/Button/Button.module.scss).
+#### Small (`h-7` / 28px)
+- **Height:** `28px`
+- **Font size:** `12px`
+- **Horizontal padding:** `8px`
+- **Purpose:** Inline table actions, breadcrumb chips, compact filter controls.
 
-#### Small
-
-- **Height:** `24px` (`min-height: 24px; max-height: 24px;`)
-- **Font size:** `12px` (`var(--t-font-size-sm)`)
-- **Horizontal padding:** `0 var(--t-spacing-1)` (`4px`)
-- **Purpose:** Inline table actions, tag pickers, breadcrumb chips, compact filter controls.
-
-#### Medium
-
-- **Height:** `32px` (`min-height: 32px; max-height: 32px;`)
-- **Font size:** `13px` / `14px` (`var(--t-font-size-md)`)
-- **Horizontal padding:** `0 var(--t-spacing-2)` (`8px`)
-- **Purpose:** Top navigation action buttons, standard CRM form inputs, modal primary actions.
+#### Medium (`h-10` / 40px)
+- **Height:** `40px`
+- **Font size:** `13px`
+- **Horizontal padding:** `12px`
+- **Purpose:** Top navigation, standard form inputs, modal primary actions.
 
 ### Icon Bounding Boxes
 
-Icon assets live in
-[`packages/twenty-ui/src/assets/icons/`](https://github.com/twentyhq/twenty/tree/main/packages/twenty-ui/src/assets/icons)
-and are mapped through
-[`TwentyIconDictionary.ts`](https://github.com/twentyhq/twenty/blob/main/packages/twenty-ui/src/icon/constants/TwentyIconDictionary.ts).
-
-Twenty uses these bounding sizes:
-
-- `14px` — inline meta indicators (for example, dropdown carets).
+- `14px` — inline meta indicators (dropdown carets).
 - `16px` — standard button and input-prefix icons.
-- `20px` / `24px` — main sidebar navigation drawer icons.
+- `20px` / `24px` — main sidebar navigation icons.
 
 ---
 
@@ -79,27 +59,19 @@ Twenty uses these bounding sizes:
 
 Twenty avoids overly rounded, bubble-like interfaces. It uses subtle radius tokens to keep layouts sharp and utility-first.
 
-Sources:
-
-- [`BorderDark.ts`](https://github.com/twentyhq/twenty/blob/main/packages/twenty-ui/src/theme/constants/BorderDark.ts)
-- [`BorderLight.ts`](https://github.com/twentyhq/twenty/blob/main/packages/twenty-ui/src/theme/constants/BorderLight.ts)
-
 | Token | Value | Typical usage |
 |---|---:|---|
-| `--t-border-radius-xs` | `2px` | Badges, micro tags |
-| `--t-border-radius-sm` | `4px` | Buttons, inputs, menu items, table chips |
-| `--t-border-radius-md` | `6px` / `8px` | Dropdown menus, popovers, flyout cards |
-| `--t-border-radius-lg` | `12px` | Modals, dialog surfaces |
-| `--t-border-radius-pill` | `9999px` | Status pills, avatar status indicators |
+| `--ods-radius-xs` | `2px` | Badges, micro tags |
+| `--ods-radius-sm` | `4px` | Buttons, inputs, menu items, table chips, status badges |
+| `--ods-radius-md` | `6px` | Dropdown menus, popovers, flyout cards, widget cards |
+| `--ods-radius-lg` | `12px` | Modals, dialog surfaces |
+| `--ods-radius-pill` | `9999px` | Avatar status indicators |
 
 ---
 
 ## 4. Typography Scale
 
 System fonts are prioritized for instant native rendering with zero font layout shift.
-
-Source:
-[`FontCommon.ts`](https://github.com/twentyhq/twenty/blob/main/packages/twenty-ui/src/theme/constants/FontCommon.ts)
 
 ### Font Stack
 
@@ -111,146 +83,290 @@ Source:
 
 | Token | Value | Typical usage |
 |---|---:|---|
-| `--t-font-size-xs` | `11px` | Field labels, helper micro-copy |
-| `--t-font-size-sm` | `12px` | Dense table cell content, compact buttons |
-| `--t-font-size-md` | `13px` / `14px` | Body text, standard inputs |
-| `--t-font-size-lg` | `16px` | Modal headers, subheadings |
-| `--t-font-size-xl` | `18px` / `20px` | Page titles, record titles |
+| `--ods-text-xs` | `11px` | Field labels, helper micro-copy, uppercase tracking |
+| `--ods-text-sm` | `12px` | Dense table cell content, compact buttons |
+| `--ods-text-md` | `13px` | Body text, standard inputs, breadcrumbs |
+| `--ods-text-lg` | `16px` | Modal headers, subheadings |
+| `--ods-text-xl` | `20px` | Page titles, stat card values |
 
 ---
 
-## 5. Three-Tier Token Flow & Styling Pattern
+## 5. Color Tokens & Thematic Variables
 
-Twenty deliberately rejects runtime CSS-in-JS in favor of **typed SCSS modules** (`.module.scss` files with `.module.scss.d.ts` definitions).
+Twenty uses CSS custom properties for all colors, enabling easy theme switching and consistent application.
 
-Values cascade through three layers:
+### Background Colors
 
-```text
-Tier 1: Raw palette scales
-(e.g. GrayScaleLight.ts, AccentLight.ts)
-        ↓
-Tier 2: Root theme variables
-(--t-background-primary, --t-spacing-2 in theme-light.css)
-        ↓
-Tier 3: Local component custom properties
-(--btn-bg, --btn-color inside Button.module.scss)
-```
+| Token | Value | Usage |
+|---|---:|---|
+| `--ods-bg-primary` | `#ffffff` | Main content area, table backgrounds |
+| `--ods-bg-secondary` | `#f0f0f3` | Card backgrounds, hover states |
+| `--ods-bg-tertiary` | `#e5e5ea` | Disabled states, subtle dividers |
 
-### Why Component-Level Variables (`--btn-*`) Exist
+### Text Colors
 
-Instead of rewriting compound CSS rules for every hover and focus combination, component stylesheets introduce a local buffer variable:
+| Token | Value | Usage |
+|---|---:|---|
+| `--ods-text-primary` | `#18181b` | Primary text, headings |
+| `--ods-text-secondary` | `#575757` | Secondary text, labels |
+| `--ods-text-tertiary` | `#8a8a93` | Placeholder text, muted indicators |
 
-```scss
-/* packages/twenty-ui/src/input/Button/Button.module.scss */
+### Border Colors
 
-.button {
-  height: var(--btn-height, 32px);
-  background: var(--btn-bg, transparent);
-  border: var(--btn-border-width, 1px) solid var(--btn-border-color, transparent);
-  border-radius: var(--btn-radius, var(--t-border-radius-sm));
-  color: var(--btn-color, var(--t-font-color-primary));
-  font-size: var(--btn-font-size, var(--t-font-size-md));
-  padding: 0 var(--btn-padding-x, var(--t-spacing-2));
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-```
+| Token | Value | Usage |
+|---|---:|---|
+| `--ods-border` | `#e5e5ea` | Hairline borders, dividers |
+| `--ods-border-strong` | `#d1d1d6` | Active focus states |
 
-When state changes (hover, focus, disabled, active), the stylesheet updates local variables such as `--btn-bg` or `--btn-border-color` rather than redeclaring entire property rules.
+### Accent Colors
+
+| Token | Value | Usage |
+|---|---:|---|
+| `--ods-brand-500` | `#3b82f6` | Primary actions, links |
+| `--ods-brand-600` | `#2563eb` | Primary buttons, active states |
+| `--ods-emerald-500` | `#10b981` | Success states, converted |
+| `--ods-amber-500` | `#f59e0b` | Warning states, interested |
+| `--ods-rose-500` | `#f43f5e` | Error states, DNC |
 
 ---
 
-## 6. State and Variants via HTML Data Attributes
+## 6. Status Badge System
 
-Twenty avoids class-name explosions such as `.btn-primary`, `.btn-is-focused`, and `.btn-medium`.
+Status badges use tinted backgrounds with subtle borders for a modern, accessible look.
 
-Instead, variants, accents, positions, and interactive states are passed into HTML `data-*` attributes on the React element:
+### Badge Variants
 
 ```tsx
-/* packages/twenty-ui/src/input/Button/Button.tsx */
-
-<button
-  className={styles.button}
-  data-variant={variant}          // 'primary' | 'secondary' | 'tertiary'
-  data-size={size}                // 'small' | 'medium'
-  data-accent={accent}            // 'blue' | 'danger' | 'gray'
-  data-position={position}        // 'left' | 'middle' | 'right' | 'standalone'
-  data-focus={isFocused || undefined}
-  data-disabled={disabled || undefined}
->
-  {children}
-</button>
+// StatusSelect.tsx STATUS_CONFIG
+{
+  new: { dotColor: "bg-blue-500", bgTint: "bg-blue-500/10", textColor: "text-blue-700" },
+  contacted: { dotColor: "bg-indigo-500", bgTint: "bg-indigo-500/10", textColor: "text-indigo-700" },
+  interested: { dotColor: "bg-amber-500", bgTint: "bg-amber-500/10", textColor: "text-amber-700" },
+  not_interested: { dotColor: "bg-gray-400", bgTint: "bg-gray-400/10", textColor: "text-gray-600" },
+  callback: { dotColor: "bg-purple-500", bgTint: "bg-purple-500/10", textColor: "text-purple-700" },
+  converted: { dotColor: "bg-emerald-500", bgTint: "bg-emerald-500/10", textColor: "text-emerald-700" },
+  do_not_contact: { dotColor: "bg-rose-500", bgTint: "bg-rose-500/10", textColor: "text-rose-700" },
+}
 ```
 
-### Button Groups and Border Collapsing
+### Badge Styling
 
-When multiple buttons sit together inside a segmented control or filter group, `data-position` controls radius and border collapsing automatically:
+- **Chip trigger:** `h-5` (20px), `rounded-[4px]`, `text-[11px]`
+- **Dot indicator:** `w-1.5 h-1.5 rounded-full`
+- **Dropdown menu:** `w-40`, `rounded-[6px]`, `z-[60]`
+- **Option row:** `h-7`, `rounded-[4px]`, hover:bg-[var(--ods-bg-secondary)]
 
-```scss
-.button[data-position='left'] {
-  --btn-radius: var(--t-border-radius-sm) 0 0 var(--t-border-radius-sm);
-  --btn-border-width: 1px 0px 1px 1px;
-}
+---
 
-.button[data-position='middle'] {
-  --btn-radius: 0;
-  --btn-border-width: 1px 0px 1px 0px;
-}
+## 7. Layout Patterns
 
-.button[data-position='right'] {
-  --btn-radius: 0 var(--t-border-radius-sm) var(--t-border-radius-sm) 0;
-  --btn-border-width: 1px 1px 1px 0px;
-}
+### Full-Bleed Table Layout
+
+Table-based pages (Leads, Prospects, Call History) use edge-to-edge rendering with no outer padding:
+
+```tsx
+<div className="flex flex-col h-full w-full select-none bg-[var(--ods-bg-primary)]">
+  {/* 40px Action Bar */}
+  <div className="h-10 px-3 flex items-center justify-between border-b border-[var(--ods-border)] shrink-0">
+    {/* Search, filters, action buttons */}
+  </div>
+  
+  {/* Full-bleed Table */}
+  <div className="flex-1 w-full overflow-auto">
+    <table className="w-full border-collapse text-left">
+      {/* Sticky header with bg-[var(--ods-bg-secondary)] */}
+      <thead className="sticky top-0 bg-[var(--ods-bg-secondary)] z-10">
+        <tr className="h-8 border-b border-[var(--ods-border)]">
+          {/* Column headers */}
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-[var(--ods-border)]">
+        {/* Data rows: h-8, hover:bg-[var(--ods-bg-secondary)] */}
+      </tbody>
+    </table>
+  </div>
+</div>
+```
+
+### Canvas Page Layout (PageCanvas)
+
+Non-table pages use a structured canvas with a 40px sub-header and scrollable content area:
+
+```tsx
+// PageCanvas.tsx
+<div className="flex flex-col flex-1 h-full min-h-0 overflow-hidden bg-[var(--ods-bg-primary)]">
+  {/* 40px Sub-Header */}
+  <header className="h-10 min-h-[40px] px-4 border-b border-[var(--ods-border)] flex items-center justify-between">
+    <span className="text-[13px] font-semibold">{title}</span>
+    {actions && <div>{actions}</div>}
+  </header>
+  
+  {/* Scrollable Canvas */}
+  <div className="flex-1 min-h-0 overflow-y-auto p-4 md:p-6">
+    {children}
+  </div>
+</div>
+```
+
+### Widget Card Component
+
+Twenty-style card primitive with hairline borders and compact headers:
+
+```tsx
+// WidgetCard.tsx
+<div className="bg-[var(--ods-bg-secondary)] border border-[var(--ods-border)] rounded-[6px] flex flex-col overflow-hidden">
+  {/* 32px Header */}
+  {title && (
+    <div className="h-8 min-h-[32px] px-3 border-b border-[var(--ods-border)] flex items-center justify-between">
+      <div className="flex items-center gap-2">
+        <Icon className="w-3.5 h-3.5 text-[var(--ods-text-tertiary)]" />
+        <span className="text-[11px] font-medium uppercase tracking-wider">{title}</span>
+      </div>
+      {action && <div>{action}</div>}
+    </div>
+  )}
+  
+  {/* Content */}
+  <div className="p-3 md:p-4 flex-1">{children}</div>
+</div>
 ```
 
 ---
 
-## 7. Master Repository Directory Index
+## 8. Z-Index Hierarchy
 
-Direct links to inspect the actual source code across the repository are grouped below.
+| Z-Index | Usage |
+|---|---|
+| `z-10` | Table header sticky position |
+| `z-30` | Main top navigation bar |
+| `z-40` | Mobile sidebar overlay |
+| `z-50` | Toast notifications, dropdown menus |
+| `z-60` | Floating UI portals (StatusSelect dropdown) |
 
-### Design Tokens & Base Themes
+---
+
+## 9. Floating UI Integration
+
+For dropdowns and popovers, use `@floating-ui/react` with `FloatingPortal`:
+
+```tsx
+import { useFloating, autoUpdate, offset, flip, shift, FloatingPortal } from '@floating-ui/react';
+
+const { refs, floatingStyles } = useFloating({
+  open: isOpen,
+  onOpenChange: setIsOpen,
+  placement: 'bottom-start',
+  whileElementsMounted: autoUpdate,
+  middleware: [offset(4), flip(), shift({ padding: 8 })],
+});
+
+// In render:
+<button ref={refs.setReference} onClick={() => setIsOpen(!isOpen)}>
+  Trigger
+</button>
+
+{isOpen && (
+  <FloatingPortal>
+    <div ref={refs.setFloating} style={floatingStyles}>
+      {/* Menu items */}
+    </div>
+  </FloatingPortal>
+)}
+```
+
+---
+
+## 10. Notification System (Toast)
+
+Toast notifications use a fixed bottom-right container with progress indicators:
+
+```tsx
+// Toast.tsx - Usage
+const { success, error, warning, info } = useToast();
+
+success('Lead deleted', 'John Doe has been removed');
+error('Error', 'Failed to delete the lead');
+
+// ToastProvider wraps the app in App.tsx
+<ToastProvider>
+  <AppRoutes />
+</ToastProvider>
+```
+
+### Toast Styling
+
+- **Position:** `fixed bottom-3 right-3 z-50`
+- **Width:** `w-[296px]`
+- **Background:** `bg-white/90 backdrop-blur-md`
+- **Border:** `border border-[var(--ods-border)]`
+- **Radius:** `rounded-[6px]`
+- **Progress bar:** Animated `shrinkWidth` with pause on hover
+
+---
+
+## 11. Practical Implementation Rules
+
+> **Always follow these guidelines to maintain Twenty alignment:**
+
+1. **Use semantic tokens** — Never hardcode hex values; use `--ods-*` variables.
+2. **Respect the 4px grid** — Heights should be multiples of 4 (28px, 40px, etc.).
+3. **Full-bleed tables** — Table pages have zero outer padding; tables extend edge-to-edge.
+4. **Canvas pages need PageCanvas** — Non-table pages must wrap content in `<PageCanvas>` for proper scrolling.
+5. **WidgetCard for cards** — Use `<WidgetCard>` for all card-like containers (6px radius, hairline borders).
+6. **StatusSelect for status** — Use the custom `StatusSelect` component for all status dropdowns.
+7. **Badge system** — Use `Badge` with variant prop for consistent status indicators.
+8. **Toast notifications** — All user actions should provide feedback via `useToast()`.
+9. **No floating UI clipping** — Keep `overflow-hidden` off parent containers that need to show dropdowns.
+10. **Breadcrumb context** — Detail pages should show the record name in the 40px top bar breadcrumb.
+
+---
+
+## 12. Component Index
+
+| Component | Path | Purpose |
+|---|---|---|
+| `Layout` | `components/common/Layout.tsx` | App shell with sidebar, header, routing |
+| `PageCanvas` | `components/common/PageCanvas.tsx` | Canvas wrapper for non-table pages |
+| `WidgetCard` | `components/ui/WidgetCard.tsx` | Twenty-style card primitive |
+| `StatusSelect` | `components/common/StatusSelect.tsx` | Floating dropdown for status selection |
+| `StatusBadge` | `components/common/StatusBadge.tsx` | Inline status indicator |
+| `Badge` | `components/ui/Badge.tsx` | Generic badge with variants |
+| `ToastProvider` | `components/ui/Toast.tsx` | Notification system |
+| `RecordIndexCommandMenu` | `components/common/RecordIndexCommandMenu.tsx` | Bulk actions toolbar |
+| `ColumnVisibilityDropdown` | `components/common/ColumnVisibilityDropdown.tsx` | Column toggle menu |
+| `RecordTableColumnHead` | `components/common/RecordTableColumnHead.tsx` | Interactive column header |
+
+---
+
+## 13. Status Filter Patterns
+
+### StatusFilter Type
+
+```tsx
+type StatusFilter = string | "all";
+```
+
+### Filtering Logic
+
+```tsx
+const filteredItems = useMemo(() => {
+  if (!items) return [];
+  return items.filter((item) => {
+    const matchesStatus = statusFilter === "all" || item.status === statusFilter;
+    const q = searchQuery.toLowerCase();
+    const matchesSearch = !q || item.name.toLowerCase().includes(q);
+    return matchesStatus && matchesSearch;
+  });
+}, [items, statusFilter, searchQuery]);
+```
+
+---
+
+## 14. Source References
 
 - [`theme-light.css`](https://github.com/twentyhq/twenty/blob/main/packages/twenty-ui/src/theme-constants/theme-light.css) — Light palette variables.
 - [`theme-dark.css`](https://github.com/twentyhq/twenty/blob/main/packages/twenty-ui/src/theme-constants/theme-dark.css) — Dark palette variables.
-- [`themeCssVariables.ts`](https://github.com/twentyhq/twenty/blob/main/packages/twenty-ui/src/theme-constants/themeCssVariables.ts) — TypeScript token keys.
-- [`ThemeProvider.tsx`](https://github.com/twentyhq/twenty/blob/main/packages/twenty-ui/src/theme-constants/ThemeProvider.tsx) — Theme context provider.
-- [`theme/constants/`](https://github.com/twentyhq/twenty/tree/main/packages/twenty-ui/src/theme/constants) — Raw color palettes (P3/sRGB scales).
-
-### Atomic Input Controls — `packages/twenty-ui/src/input/`
-
-- [`Button.tsx`](https://github.com/twentyhq/twenty/blob/main/packages/twenty-ui/src/input/Button/Button.tsx) & [`Button.module.scss`](https://github.com/twentyhq/twenty/blob/main/packages/twenty-ui/src/input/Button/Button.module.scss)
-- [`IconButton.tsx`](https://github.com/twentyhq/twenty/blob/main/packages/twenty-ui/src/input/IconButton/IconButton.tsx) & [`IconButton.module.scss`](https://github.com/twentyhq/twenty/blob/main/packages/twenty-ui/src/input/IconButton/IconButton.module.scss)
-- [`Checkbox.tsx`](https://github.com/twentyhq/twenty/blob/main/packages/twenty-ui/src/input/Checkbox/Checkbox.tsx) & [`Checkbox.module.scss`](https://github.com/twentyhq/twenty/blob/main/packages/twenty-ui/src/input/Checkbox/Checkbox.module.scss)
-- [`Radio.tsx`](https://github.com/twentyhq/twenty/blob/main/packages/twenty-ui/src/input/Radio/Radio.tsx) & [`Radio.module.scss`](https://github.com/twentyhq/twenty/blob/main/packages/twenty-ui/src/input/Radio/Radio.module.scss)
-
-### Badges, Tags & Display — `packages/twenty-ui/src/data-display/`
-
-- [`Chip.tsx`](https://github.com/twentyhq/twenty/blob/main/packages/twenty-ui/src/data-display/Chip/Chip.tsx) & [`Chip.module.scss`](https://github.com/twentyhq/twenty/blob/main/packages/twenty-ui/src/data-display/Chip/Chip.module.scss)
-- [`Tag.tsx`](https://github.com/twentyhq/twenty/blob/main/packages/twenty-ui/src/data-display/Tag/Tag.tsx) & [`Tag.module.scss`](https://github.com/twentyhq/twenty/blob/main/packages/twenty-ui/src/data-display/Tag/Tag.module.scss)
-- [`Avatar.tsx`](https://github.com/twentyhq/twenty/blob/main/packages/twenty-ui/src/data-display/Avatar/Avatar.tsx) & [`Avatar.module.scss`](https://github.com/twentyhq/twenty/blob/main/packages/twenty-ui/src/data-display/Avatar/Avatar.module.scss)
-- [`Status.tsx`](https://github.com/twentyhq/twenty/blob/main/packages/twenty-ui/src/data-display/Status/Status.tsx) & [`Status.module.scss`](https://github.com/twentyhq/twenty/blob/main/packages/twenty-ui/src/data-display/Status/Status.module.scss)
-
-### Composite Layout Surfaces — `packages/twenty-front/src/modules/ui/`
-
-- [`Dropdown.tsx`](https://github.com/twentyhq/twenty/blob/main/packages/twenty-front/src/modules/ui/layout/dropdown/components/Dropdown.tsx)
-- [`ConfirmationModal.tsx`](https://github.com/twentyhq/twenty/blob/main/packages/twenty-front/src/modules/ui/layout/modal/components/ConfirmationModal.tsx)
-- [`Table.tsx`](https://github.com/twentyhq/twenty/blob/main/packages/twenty-front/src/modules/ui/layout/table/components/Table.tsx)
-- [`NavigationDrawer.tsx`](https://github.com/twentyhq/twenty/blob/main/packages/twenty-front/src/modules/ui/navigation/navigation-drawer/components/NavigationDrawer.tsx)
-- [`ResizablePanelEdge.tsx`](https://github.com/twentyhq/twenty/blob/main/packages/twenty-front/src/modules/ui/layout/resizable-panel/components/ResizablePanelEdge.tsx)
-
----
-
-## 8. Practical Implementation Rule
-
-> **Never declare hardcoded pixel heights or background hex values inside components.**
-
-Instead:
-
-1. Use a `24px` or `32px` sizing step where appropriate.
-2. Bind colors to the `--t-*` theme variables.
-3. Toggle component states through `data-*` attributes.
-4. Use the shared Twenty UI primitives and tokens before creating new local patterns.
-
-Following this approach keeps the frontend closely aligned with Twenty Core and makes the design system easier to maintain.
+- [`Button.tsx`](https://github.com/twentyhq/twenty/blob/main/packages/twenty-ui/src/input/Button/Button.tsx) — Button primitive.
+- [`Chip.tsx`](https://github.com/twentyhq/twenty/blob/main/packages/twenty-ui/src/data-display/Chip/Chip.tsx) — Chip component.
+- [`RecordIndexPageHeader.tsx`](https://github.com/twentyhq/twenty/blob/main/packages/twenty-front/src/modules/object-record/record-index/components/RecordIndexPageHeader.tsx) — Table action bar.
+- [`RecordTableColumnHead.tsx`](https://github.com/twentyhq/twenty/blob/main/packages/twenty-front/src/modules/object-record/record-table/components/RecordTableColumnHead.tsx) — Column header component.
