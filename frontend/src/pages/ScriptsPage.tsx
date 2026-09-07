@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { BookOpen, AlertTriangle, Search, Plus, Trash2, Save, X } from "lucide-react";
+import { useFloating, autoUpdate, offset, flip, shift, FloatingPortal } from "@floating-ui/react";
 import { PageCanvas } from "@/components/common/PageCanvas";
 import { WidgetCard } from "@/components/ui/WidgetCard";
-import { Button } from "@/components/ui/Button";
 import { StatusSelect } from "@/components/common/StatusSelect";
 import { api } from "@/lib/apiClient";
 import { useScripts, Script } from "@/hooks/useScripts";
@@ -11,6 +11,72 @@ import { useCreateScript, useDeleteScript, useUpdateScript } from "@/hooks/useSc
 interface Campaign {
   id: string;
   name: string;
+}
+
+// Custom floating-ui dropdown for campaign selection
+function CampaignSelect({ campaigns, value, onChange }: { campaigns: Campaign[]; value: string | null; onChange: (id: string | null) => void }) {
+  const [isOpen, setIsOpen] = useState(false);
+  
+  const { refs, floatingStyles } = useFloating({
+    open: isOpen,
+    onOpenChange: setIsOpen,
+    placement: "bottom-start",
+    whileElementsMounted: autoUpdate,
+    middleware: [offset(4), flip(), shift({ padding: 8 })],
+  });
+
+  const selectedCampaign = campaigns.find((c) => c.id === value);
+
+  return (
+    <>
+      <button
+        ref={refs.setReference}
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full h-9 px-3 text-[13px] border border-[var(--ods-border)] rounded-[4px] bg-[var(--ods-bg-primary)] text-[var(--ods-text-primary)] outline-none focus:border-[var(--ods-brand-500)] text-left flex items-center justify-between"
+      >
+        <span className={selectedCampaign ? "" : "text-[var(--ods-text-tertiary)]"}>
+          {selectedCampaign ? selectedCampaign.name : "No Campaign"}
+        </span>
+        <svg className="w-4 h-4 text-[var(--ods-text-tertiary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {isOpen && (
+        <FloatingPortal>
+          <div
+            ref={refs.setFloating}
+            style={floatingStyles}
+            className="z-[60] w-48 py-1 bg-[var(--ods-bg-primary)] border border-[var(--ods-border)] rounded-[6px] shadow-lg flex flex-col gap-0.5 select-none max-h-60 overflow-y-auto"
+          >
+            <div
+              onClick={() => { onChange(null); setIsOpen(false); }}
+              className={`h-7 px-2.5 mx-1 rounded-[4px] flex items-center text-[12px] cursor-pointer transition-colors ${
+                !value
+                  ? "bg-[var(--ods-bg-secondary)] font-medium text-[var(--ods-text-primary)]"
+                  : "text-[var(--ods-text-secondary)] hover:bg-[var(--ods-bg-secondary)] hover:text-[var(--ods-text-primary)]"
+              }`}
+            >
+              No Campaign
+            </div>
+            {campaigns.map((campaign) => (
+              <div
+                key={campaign.id}
+                onClick={() => { onChange(campaign.id); setIsOpen(false); }}
+                className={`h-7 px-2.5 mx-1 rounded-[4px] flex items-center text-[12px] cursor-pointer transition-colors ${
+                  campaign.id === value
+                    ? "bg-[var(--ods-bg-secondary)] font-medium text-[var(--ods-text-primary)]"
+                    : "text-[var(--ods-text-secondary)] hover:bg-[var(--ods-bg-secondary)] hover:text-[var(--ods-text-primary)]"
+                }`}
+              >
+                {campaign.name}
+              </div>
+            ))}
+          </div>
+        </FloatingPortal>
+      )}
+    </>
+  );
 }
 
 export function ScriptsPage() {
@@ -305,18 +371,11 @@ export function ScriptsPage() {
                     Campaign
                   </label>
                   {isEditing ? (
-                    <select
-                      value={editForm.campaignId || ""}
-                      onChange={(e) => setEditForm({ ...editForm, campaignId: e.target.value || null })}
-                      className="w-full px-3 py-2 text-[13px] border border-[var(--ods-border)] rounded-[4px] bg-[var(--ods-bg-primary)] text-[var(--ods-text-primary)] outline-none focus:border-[var(--ods-brand-500)]"
-                    >
-                      <option value="">No Campaign</option>
-                      {campaigns.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name}
-                        </option>
-                      ))}
-                    </select>
+                    <CampaignSelect
+                      campaigns={campaigns}
+                      value={editForm.campaignId}
+                      onChange={(id) => setEditForm({ ...editForm, campaignId: id })}
+                    />
                   ) : (
                     <p className="text-[13px] text-[var(--ods-text-primary)]">
                       {campaigns.find((c) => c.id === selectedScript.campaignId)?.name || "No Campaign"}
