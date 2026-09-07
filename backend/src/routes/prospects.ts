@@ -38,6 +38,7 @@ interface AgencyProspect {
   outboundLabel?: string;
   coldCallStatus?: string;
   utmSource?: string;
+  campaignIdId?: string; // Relation to agencyCampaign
   createdAt?: string;
   updatedAt?: string;
 }
@@ -94,7 +95,7 @@ router.get("/", async (_req, res) => {
         zip,
         status,
         source: prospect.niche || "twenty-import",
-        campaign_id: undefined,
+        campaign_id: prospect.campaignIdId || undefined,
         campaign_type: prospect.utmSource ? (prospect.utmSource === 'outbound' ? 'outbound' : prospect.utmSource === 'inbound' ? 'inbound' : 'blended') : undefined,
         assigned_to: undefined,
         tags: prospect.outboundState ? [prospect.outboundState] : null,
@@ -122,6 +123,9 @@ router.get("/:id", async (req, res) => {
     const id = req.params.id as string;
     const prospect = await getTwenty<AgencyProspect>('agencyProspects', id);
     log.info(`Raw prospect from Twenty: ${JSON.stringify(prospect)}`);
+    log.info(`  All keys: ${JSON.stringify(Object.keys(prospect as any))}`);
+    log.info(`  campaignIdId: ${prospect.campaignIdId}`);
+    log.info(`  Any campaign-related keys: ${Object.keys(prospect as any).filter(k => k.toLowerCase().includes('campaign')).join(', ')}`);
 
     const addressParts = (prospect.fullAddress || "").split(",").map(p => p.trim());
     const fullName = prospect.name || "";
@@ -146,6 +150,7 @@ router.get("/:id", async (req, res) => {
       zip: addressParts[3],
       status,
       source: prospect.niche || "twenty-import",
+      campaign_id: prospect.campaignIdId || undefined,
       campaign_type: prospect.utmSource ? (prospect.utmSource === 'outbound' ? 'outbound' : prospect.utmSource === 'inbound' ? 'inbound' : 'blended') : undefined,
       tags: prospect.outboundState ? [prospect.outboundState] : null,
       notes: prospect.outboundLabel,
@@ -239,6 +244,7 @@ router.patch("/:id", async (req: AuthRequest, res) => {
     const {
       first_name, last_name, phone, email, website,
       address, city, state, zip, status, source, tags, notes, dnc,
+      campaign_id,
     } = req.body;
 
     const payload: any = {};
@@ -260,6 +266,11 @@ router.patch("/:id", async (req: AuthRequest, res) => {
     if (source !== undefined) payload.niche = source;
     if (notes !== undefined) payload.outboundLabel = notes;
     if (tags?.[0] !== undefined) payload.outboundState = tags[0];
+
+    // Handle campaign relation
+    if (campaign_id !== undefined) {
+      payload.campaignIdId = campaign_id || null;
+    }
 
     // Map status
     if (status !== undefined) {
@@ -295,6 +306,7 @@ router.patch("/:id", async (req: AuthRequest, res) => {
       phone: prospect.phone,
       email: prospect.email,
       status: mappedStatus,
+      campaign_id: prospect.campaignIdId || undefined,
       created_at: prospect.createdAt || new Date().toISOString(),
       updated_at: prospect.updatedAt || new Date().toISOString(),
     };

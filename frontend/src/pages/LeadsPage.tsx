@@ -11,6 +11,7 @@ import { LeadForm } from "@/components/leads/LeadForm";
 import { useToast } from "@/components/ui/Toast";
 import { Mail, Phone } from "lucide-react";
 import { ActionsMenu } from "@/components/common/ActionsMenu";
+import { CampaignSelect } from "@/components/common/CampaignSelect";
 import { api } from "@/lib/apiClient";
 import { useQuery } from "@tanstack/react-query";
 
@@ -35,6 +36,13 @@ export function LeadsPage() {
     ? mapLeadProspectStatusOptions(meta.fields["coldCallStatus"])
     : [];
 
+  // Fetch campaigns for assignment
+  const { data: campaigns } = useQuery({
+    queryKey: ["campaigns"],
+    queryFn: async () => api.campaigns.list(),
+    staleTime: Infinity,
+  });
+
   const [showForm, setShowForm] = useState(false);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -48,7 +56,8 @@ export function LeadsPage() {
     { key: 'phone', label: 'Phone', visible: true },
     { key: 'status', label: 'Status', visible: true },
     { key: 'last_called', label: 'Last Called', visible: true },
-    { key: 'type', label: 'Type', visible: true },
+    { key: 'type', label: 'Industry', visible: true },
+    { key: 'campaign', label: 'Campaign', visible: true },
   ]);
 
   const isVisible = (key: string) => columns.find(c => c.key === key)?.visible ?? true;
@@ -85,6 +94,15 @@ export function LeadsPage() {
   async function handleStatusChange(leadId: string, newStatus: string) {
     await updateLead.mutateAsync({ id: leadId, status: newStatus as any });
     success("Status updated", `Status changed to "${newStatus}"`);
+  }
+
+  async function handleCampaignChange(leadId: string, campaignId: string | null) {
+    try {
+      await api.leads.update(leadId, { campaign_id: campaignId });
+      success("Campaign updated", `Campaign set to "${campaignId ? campaigns?.find(c => c.id === campaignId)?.name || campaignId : "—"}"`);
+    } catch (err) {
+      toastError("Error", "Failed to update campaign");
+    }
   }
 
   async function handleBulkDelete() {
@@ -225,10 +243,19 @@ export function LeadsPage() {
                   </td>
                 )}
                 {isVisible('type') && (
-                  <td className="px-3 text-[13px] text-[var(--ods-text-secondary)]">
+                  <td className="px-3">
                     <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] text-[11px] font-medium bg-[var(--ods-bg-secondary)] border border-[var(--ods-border)] text-[var(--ods-text-primary)]">
                       {lead.source || "—"}
                     </span>
+                  </td>
+                )}
+                {isVisible('campaign') && (
+                  <td className="px-3">
+                    <CampaignSelect
+                      campaigns={campaigns}
+                      value={lead.campaign_id}
+                      onChange={(campaignId) => handleCampaignChange(lead.id, campaignId)}
+                    />
                   </td>
                 )}
                 <td className="w-16 px-3 text-right">
@@ -250,6 +277,7 @@ export function LeadsPage() {
                       leadName={`${lead.first_name} ${lead.last_name}`}
                       onView={(id) => navigate(`/leads/${id}`)}
                       onDelete={(id, name) => setDeleteConfirm({ id, name })}
+                      data={lead}
                     />
                   </div>
                 </td>

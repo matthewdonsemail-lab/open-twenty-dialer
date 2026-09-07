@@ -116,6 +116,7 @@ Template-site prospect rows. Represents discovered business targets for cold cal
 | `outboundLabel` | TEXT | Call notes/label |
 | `externalId` | TEXT | Source system identifier |
 | `utmSource` | TEXT | Campaign source (outbound/inbound) |
+| `campaignId` | RELATION | Link to agencyCampaign |
 
 ### agencyLeads
 
@@ -134,6 +135,7 @@ Converted prospects that have shown interest.
 | `status` | TEXT | Lead status |
 | `coldCallStatus` | SELECT | Cold call status |
 | `createdById` | TEXT | Campaign ID reference |
+| `campaignId` | RELATION | Link to agencyCampaign |
 
 ### agencyCampaigns
 
@@ -157,7 +159,75 @@ Call scripts linked to campaigns.
 |-------|------|-------------|
 | `name` | TEXT | Script name |
 | `scriptData` | TEXT | JSON with script content + objection responses |
-| `campaignId` | RELATION | Link to agencyCampaign |
+| `campaignId` | RELATION | Link to agencyCampaign (uses `campaignIdId` in REST API) |
+
+---
+
+## Relations Between Objects
+
+### Campaign Relations
+
+All three custom objects (`agencyProspects`, `agencyLeads`, `agencyScripts`) can be linked to campaigns via the `campaignId` relation field.
+
+**Important:** Twenty uses the `{fieldName}Id` pattern for relation fields in REST API operations:
+
+```typescript
+// To link a prospect to a campaign:
+{ campaignIdId: "0181d430-880f-4c9e-b919-e224a39df574" }
+
+// To unlink:
+{ campaignIdId: null }
+```
+
+### Frontend Integration
+
+The `CallScriptViewer` component automatically loads scripts based on the campaign ID from the lead or prospect:
+
+```tsx
+// LeadDetailPage.tsx
+<CallScriptViewer 
+  onClose={() => setShowScript(false)} 
+  campaignId={lead?.campaignIdId ?? null} 
+/>
+
+// ProspectDetailPage.tsx
+<CallScriptViewer 
+  onClose={() => setShowScript(false)} 
+  campaignId={prospect?.campaignIdId ?? null} 
+ />
+```
+
+### Creating Relation Fields
+
+To add a new relation field via GraphQL:
+
+```graphql
+mutation {
+  createOneField(input: {
+    field: {
+      objectMetadataId: "<object-id>"
+      type: RELATION
+      name: "campaignId"
+      label: "Campaign"
+      isNullable: true
+      settings: {
+        relationType: "MANY_TO_ONE"
+        onDelete: "SET_NULL"
+        joinColumnName: "campaignIdId"
+      }
+      relationCreationPayload: {
+        targetObjectMetadataId: "<campaign-object-id>"
+        targetFieldLabel: "Scripts"
+        targetFieldIcon: "IconFileText"
+        type: "MANY_TO_ONE"
+      }
+    }
+  }) {
+    id
+    name
+  }
+}
+```
 
 ---
 

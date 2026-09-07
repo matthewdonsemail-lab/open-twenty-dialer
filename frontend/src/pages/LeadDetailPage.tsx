@@ -25,11 +25,23 @@ export function LeadDetailPage() {
   const navigate = useNavigate();
   const { success, error: toastError } = useToast();
   const { data: lead, isLoading } = useLead(leadId ?? "");
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
+  const [showScript, setShowScript] = useState(false);
 
   React.useEffect(() => {
     if (lead) console.log("LeadDetailPage data:", JSON.stringify(lead, null, 2));
   }, [lead]);
   const { data: callLogs } = useCallLog(leadId ?? "");
+
+  // Fetch campaigns to resolve campaign_id to name
+  const { data: campaigns } = useQuery({
+    queryKey: ["campaigns"],
+    queryFn: async () => api.campaigns.list(),
+    staleTime: Infinity,
+  });
+
+  const campaignName = campaigns?.find(c => c.id === lead?.campaign_id)?.name;
 
   // Fetch status options from Twenty CRM
   const { data: meta } = useQuery<{ fields: Record<string, Array<{ label: string; value: string; color: string }>> }>({
@@ -169,27 +181,6 @@ export function LeadDetailPage() {
             </button>
           </WidgetCard>
 
-          <WidgetCard title="Contact Info">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-[var(--ods-sp-3)]">
-              <div className="flex items-center gap-2 text-[13px]">
-                <Phone className="w-4 h-4 text-[var(--ods-text-tertiary)]" />
-                <span className="text-[var(--ods-text-secondary)]">{lead.phone ?? "—"}</span>
-              </div>
-              <div className="flex items-center gap-2 text-[13px]">
-                <Mail className="w-4 h-4 text-[var(--ods-text-tertiary)]" />
-                <span className="text-[var(--ods-text-secondary)]">{lead.email ?? "—"}</span>
-              </div>
-              <div className="flex items-center gap-2 text-[13px]">
-                <Globe className="w-4 h-4 text-[var(--ods-text-tertiary)]" />
-                <span className="text-[var(--ods-text-secondary)]">{lead.website ?? "—"}</span>
-              </div>
-              <div className="flex items-center gap-2 text-[13px]">
-                <MapPin className="w-4 h-4 text-[var(--ods-text-tertiary)]" />
-                <span className="text-[var(--ods-text-secondary)]">{lead.address ?? "—"}</span>
-              </div>
-            </div>
-          </WidgetCard>
-
           <WidgetCard title="Notes">
             <p className="text-[13px] text-[var(--ods-text-secondary)] whitespace-pre-wrap">
               {lead.notes ?? "No notes yet"}
@@ -222,6 +213,16 @@ export function LeadDetailPage() {
                 </div>
               )}
 
+              {/* Campaign Badge */}
+              {lead.campaign_id && (
+                <div>
+                  <dt className="text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-tertiary)] mb-2">
+                    Campaign
+                  </dt>
+                  <Badge variant="blue">{campaignName || lead.campaign_id.substring(0, 8) + "..."}</Badge>
+                </div>
+              )}
+
               <dl className="flex flex-col gap-[var(--ods-sp-3)]">
                 {[
                   ["Company", lead.company ?? "—"],
@@ -242,6 +243,43 @@ export function LeadDetailPage() {
                   </div>
                 ))}
               </dl>
+            </div>
+          </WidgetCard>
+
+          <WidgetCard title="Contact Info">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-[var(--ods-sp-3)]">
+              {lead.phone && (
+                <div className="flex items-center gap-2 text-[13px]">
+                  <Phone className="w-4 h-4 text-[var(--ods-text-tertiary)]" />
+                  <a href={`tel:${lead.phone}`} className="text-[var(--ods-text-secondary)] hover:text-[var(--ods-brand-600)]" target="_blank" rel="noopener noreferrer">
+                    {lead.phone}
+                  </a>
+                </div>
+              )}
+              {lead.email && (
+                <div className="flex items-center gap-2 text-[13px]">
+                  <Mail className="w-4 h-4 text-[var(--ods-text-tertiary)]" />
+                  <a href={`mailto:${lead.email}`} className="text-[var(--ods-text-secondary)] hover:text-[var(--ods-brand-600)]" target="_blank" rel="noopener noreferrer">
+                    {lead.email}
+                  </a>
+                </div>
+              )}
+              {lead.website && (
+                <div className="flex items-center gap-2 text-[13px]">
+                  <Globe className="w-4 h-4 text-[var(--ods-text-tertiary)]" />
+                  <a href={lead.website} className="text-[var(--ods-text-secondary)] hover:text-[var(--ods-brand-600)]" target="_blank" rel="noopener noreferrer">
+                    {lead.website}
+                  </a>
+                </div>
+              )}
+              {(lead.address || lead.city || lead.state || lead.zip) && (
+                <div className="flex items-center gap-2 text-[13px]">
+                  <MapPin className="w-4 h-4 text-[var(--ods-text-tertiary)]" />
+                  <span className="text-[var(--ods-text-secondary)]">
+                    {[lead.address, lead.city, lead.state, lead.zip].filter(Boolean).join(", ") || "—"}
+                  </span>
+                </div>
+              )}
             </div>
           </WidgetCard>
 
@@ -280,7 +318,7 @@ export function LeadDetailPage() {
         />
       )}
 
-      {showScript && <CallScriptViewer onClose={() => setShowScript(false)} />}
+      {showScript && <CallScriptViewer onClose={() => setShowScript(false)} campaignId={lead?.campaign_id ?? null} />}
 
       {/* NOTE: `showEdit` opens nothing yet — same pre-existing gap as before this pass.
           This is a functional/data-wiring issue (no edit form + unknown useUpdateLead

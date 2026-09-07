@@ -41,6 +41,7 @@ interface AgencyLead {
   note?: string;
   outboundMessage?: string;
   createdById?: string;
+  campaignIdId?: string; // Relation to agencyCampaign
   createdAt?: string;
   updatedAt?: string;
 }
@@ -85,7 +86,7 @@ router.get("/", async (_req, res) => {
         zip: undefined,
         status,
         source: lead.source,
-        campaign_id: undefined,
+        campaign_id: lead.campaignIdId || undefined,
         campaign_type: campaignType,
         assigned_to: lead.createdById,
         tags: null,
@@ -142,7 +143,7 @@ router.get("/:id", async (req, res) => {
       zip: undefined,
       status,
       source: lead.source,
-      campaign_id: undefined,
+      campaign_id: lead.campaignIdId || undefined,
       campaign_type: lead.createdById ? (campaignMap[lead.createdById] || undefined) : undefined,
       assigned_to: lead.createdById,
       tags: null,
@@ -267,6 +268,11 @@ router.patch("/:id", async (req: AuthRequest, res) => {
     if (email !== undefined) payload.email = email;
     if (notes !== undefined) payload.note = notes;
     if (source !== undefined) payload.source = source;
+
+    // Handle campaign relation
+    if (campaign_id !== undefined) {
+      payload.campaignIdId = campaign_id || null;
+    }
     
     // Map status
     if (status !== undefined) {
@@ -303,6 +309,7 @@ router.patch("/:id", async (req: AuthRequest, res) => {
       phone: lead.phone?.primaryPhoneNumber,
       email: lead.email,
       status: mappedStatus,
+      campaign_id: lead.campaignIdId || undefined,
       notes: lead.note,
       created_at: lead.createdAt || new Date().toISOString(),
       updated_at: lead.updatedAt || new Date().toISOString(),

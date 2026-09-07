@@ -1,92 +1,100 @@
 import React, { useState } from "react";
 import { X, BookOpen, AlertTriangle } from "lucide-react";
-import type { Database } from "@/types/database";
-
-type Script = Database["public"]["Tables"]["call_scripts"]["Row"];
+import { useScripts, Script } from "@/hooks/useScripts";
 
 interface CallScriptViewerProps {
   onClose: () => void;
+  campaignId?: string | null;
 }
 
-const SAMPLE_SCRIPT: Script = {
-  id: "sample",
-  title: "Cold Outreach Script — Medical Practices",
-  category: "Medical",
-  content: "Good morning, this is Luke from your company. I'm reaching out because we help specialty practices like yours streamline operations and reduce overhead. Do you have a few minutes to discuss how we can save your practice time and money each month?",
-  objection_responses: {
-    "We're happy with our current billing": {
-      response: "That's great to hear. Many of our clients felt the same way until they saw our average 30% reduction in denied claims. Could I show you a quick comparison?",
-      category: "satisfaction",
-    },
-    "I don't have time right now": {
-      response: "I completely understand. This is a 15-minute conversation that could save hours each week. When would be a better time — tomorrow or later this week?",
-      category: "time",
-    },
-    "Send me an email instead": {
-      response: "I'd love to send over our case study, but a quick call is much faster. I can show you real numbers from practices just like yours. Would 10 minutes tomorrow work?",
-      category: "deferral",
-    },
-    "We just changed billing companies": {
-      response: "That's great! When they're ready, or if the new vendor doesn't meet expectations, I'd love to have a conversation. Mind if I follow up in 3 months?",
-      category: "timing",
-    },
-  },
-  campaign_id: null,
-  created_by: null,
-  is_active: true,
-  created_at: new Date().toISOString(),
-  updated_at: new Date().toISOString(),
-};
-
-export function CallScriptViewer({ onClose }: CallScriptViewerProps) {
-  const [script] = useState<Script>(SAMPLE_SCRIPT);
+export function CallScriptViewer({ onClose, campaignId }: CallScriptViewerProps) {
   const [activeObjection, setActiveObjection] = useState<string | null>(null);
+  
+  // Fetch scripts and find the one for this campaign
+  const { data: scripts, isLoading } = useScripts();
+  
+  const script = scripts?.find((s: Script) => s.campaignId === campaignId) || null;
 
-  const objections = Object.entries(script.objection_responses ?? {});
+  if (!script) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div className="bg-[var(--ods-bg-primary)] rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-[var(--ods-border)]">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--ods-border)]">
+            <div className="flex items-center gap-2">
+              <BookOpen className="w-5 h-5 text-[var(--ods-brand-600)]" />
+              <h2 className="text-base font-semibold text-[var(--ods-text-primary)]">Call Script</h2>
+            </div>
+            <button onClick={onClose} className="text-[var(--ods-text-tertiary)] hover:text-[var(--ods-text-primary)] transition-colors">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          <div className="p-5 text-center">
+            <p className="text-[13px] text-[var(--ods-text-secondary)]">No script found for this campaign</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const objections = Object.entries(script.scriptData?.objection_responses ?? {});
+  const content = script.scriptData?.content || "";
+  const category = script.scriptData?.category || "General";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-5 border-b border-gray-200">
+      <div className="bg-[var(--ods-bg-primary)] rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-[var(--ods-border)]">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--ods-border)]">
           <div className="flex items-center gap-2">
-            <BookOpen className="w-5 h-5 text-brand-600" />
-            <h2 className="text-lg font-semibold text-gray-900">{script.title}</h2>
+            <BookOpen className="w-5 h-5 text-[var(--ods-brand-600)]" />
+            <h2 className="text-base font-semibold text-[var(--ods-text-primary)]">{script.name}</h2>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+          <button onClick={onClose} className="text-[var(--ods-text-tertiary)] hover:text-[var(--ods-text-primary)] transition-colors">
             <X className="w-5 h-5" />
           </button>
         </div>
+        
         <div className="p-5 space-y-5">
-          <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-brand-100 text-brand-800">
-            {script.category}
+          {/* Category Badge */}
+          <span className="inline-block px-2.5 py-0.5 rounded-[4px] text-xs font-semibold bg-[var(--ods-brand-500)/10] text-[var(--ods-brand-700)] border border-[var(--ods-brand-500)/20]">
+            {category}
           </span>
-          <div className="bg-gray-50 rounded-lg p-4">
-            <p className="text-gray-800 leading-relaxed whitespace-pre-wrap">{script.content}</p>
-          </div>
-          <div>
-            <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-amber-500" />
-              Common Objections & Responses
-            </h3>
-            <div className="space-y-2">
-              {objections.map(([objection, data]: [string, any]) => (
-                <div key={objection}>
-                  <button
-                    onClick={() => setActiveObjection(activeObjection === objection ? null : objection)}
-                    className="w-full text-left p-3 rounded-lg border border-gray-200 hover:border-brand-300 hover:bg-brand-50 transition text-sm"
-                  >
-                    <span className="font-medium text-gray-900">"{objection}"</span>
-                    <span className="text-xs text-gray-400 ml-2">{data.category}</span>
-                  </button>
-                  {activeObjection === objection && (
-                    <div className="mt-2 p-3 bg-brand-50 rounded-lg border border-brand-200 text-sm text-brand-900">
-                      {data.response}
-                    </div>
-                  )}
-                </div>
-              ))}
+          
+          {/* Script Content */}
+          {content && (
+            <div className="bg-[var(--ods-bg-secondary)] rounded-lg p-4 border border-[var(--ods-border)]">
+              <p className="text-[var(--ods-text-primary)] leading-relaxed whitespace-pre-wrap">
+                {content}
+              </p>
             </div>
-          </div>
+          )}
+          
+          {/* Objections & Responses */}
+          {objections.length > 0 && (
+            <div>
+              <h3 className="text-sm font-semibold text-[var(--ods-text-primary)] mb-3 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-[var(--ods-amber-500)]" />
+                Common Objections & Responses
+              </h3>
+              <div className="space-y-2">
+                {objections.map(([objection, data]: [string, any]) => (
+                  <div key={objection}>
+                    <button
+                      onClick={() => setActiveObjection(activeObjection === objection ? null : objection)}
+                      className="w-full text-left p-3 rounded-lg border border-[var(--ods-border)] hover:border-[var(--ods-brand-300)] hover:bg-[var(--ods-brand-50)] transition text-sm"
+                    >
+                      <span className="font-medium text-[var(--ods-text-primary)]">"{objection}"</span>
+                      <span className="text-xs text-[var(--ods-text-tertiary)] ml-2">{data.category}</span>
+                    </button>
+                    {activeObjection === objection && (
+                      <div className="mt-2 p-3 bg-[var(--ods-brand-50)] rounded-lg border border-[var(--ods-brand-200)] text-sm text-[var(--ods-text-primary)]">
+                        {data.response}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

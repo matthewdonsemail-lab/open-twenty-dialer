@@ -158,7 +158,42 @@ Status badges use tinted backgrounds with subtle borders for a modern, accessibl
 
 ---
 
-## 7. Layout Patterns
+## 7. Relation Field Display Pattern
+
+Twenty CRM uses `{fieldName}Id` pattern for relation fields in the REST API. When displaying related records, always resolve and show the relation name using the `Badge` component.
+
+### Pattern for Displaying Relations
+
+```tsx
+import { Badge } from "@/components/ui/Badge";
+
+// In your component:
+{record.campaignId && (
+  <Badge variant="blue">
+    {campaigns.find((c) => c.id === record.campaignId)?.name || "Campaign"}
+  </Badge>
+)}
+```
+
+### Common Relation Badges
+
+| Field | Badge Variant | Usage |
+|-------|---------------|-------|
+| `campaignId` | `blue` | Script/Campaign relation |
+| `companyId` | `purple` | Company/Account relation |
+| `personId` | `indigo` | Person/Contact relation |
+| `status` | Dynamic | Based on status config |
+
+### Why Badge for Relations?
+
+- **Visual distinction:** Badges provide clear visual separation from plain text
+- **Consistent styling:** Uses the same design system tokens
+- **Compact display:** Works well in list items and widget cards
+- **Hover states:** Provides better interactivity opportunities
+
+---
+
+## 8. Z-Index Hierarchy
 
 ### Full-Bleed Table Layout
 
@@ -314,10 +349,11 @@ error('Error', 'Failed to delete the lead');
 4. **Canvas pages need PageCanvas** — Non-table pages must wrap content in `<PageCanvas>` for proper scrolling.
 5. **WidgetCard for cards** — Use `<WidgetCard>` for all card-like containers (6px radius, hairline borders).
 6. **StatusSelect for status** — Use the custom `StatusSelect` component for all status dropdowns.
-7. **Badge system** — Use `Badge` with variant prop for consistent status indicators.
-8. **Toast notifications** — All user actions should provide feedback via `useToast()`.
-9. **No floating UI clipping** — Keep `overflow-hidden` off parent containers that need to show dropdowns.
-10. **Breadcrumb context** — Detail pages should show the record name in the 40px top bar breadcrumb.
+7. **Badge system** — Use `Badge` with variant prop for consistent status indicators and relation fields.
+8. **Relation fields display** — Always show relation names (e.g., campaign, company) as `<Badge>` components, not plain text.
+9. **Toast notifications** — All user actions should provide feedback via `useToast()`.
+10. **No floating UI clipping** — Keep `overflow-hidden` off parent containers that need to show dropdowns.
+11. **Breadcrumb context** — Detail pages should show the record name in the 40px top bar breadcrumb.
 
 ---
 

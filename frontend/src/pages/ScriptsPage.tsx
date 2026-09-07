@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { BookOpen, AlertTriangle, Search, Plus, Trash2, Save, X, Check } from "lucide-react";
 import { useFloating, autoUpdate, offset, flip, shift, FloatingPortal } from "@floating-ui/react";
+import { Badge } from "@/components/ui/Badge";
 import { PageCanvas } from "@/components/common/PageCanvas";
 import { WidgetCard } from "@/components/ui/WidgetCard";
 import { StatusSelect } from "@/components/common/StatusSelect";
@@ -299,9 +300,9 @@ export function ScriptsPage() {
                     {script.scriptData?.category || "General"}
                   </span>
                   {script.campaignId && (
-                    <span className="inline-block px-2 py-0.5 rounded-[4px] text-[11px] font-medium bg-[var(--ods-brand-500)/10] text-[var(--ods-brand-600)]">
-                      Campaign
-                    </span>
+                    <Badge variant="blue">
+                      {campaigns.find((c) => c.id === script.campaignId)?.name || "Campaign"}
+                    </Badge>
                   )}
                 </div>
               </button>
@@ -379,9 +380,9 @@ export function ScriptsPage() {
                       onChange={(id) => setEditForm({ ...editForm, campaignId: id })}
                     />
                   ) : (
-                    <p className="text-[13px] text-[var(--ods-text-primary)]">
+                    <Badge variant="blue">
                       {campaigns.find((c) => c.id === selectedScript.campaignId)?.name || "No Campaign"}
-                    </p>
+                    </Badge>
                   )}
                 </div>
 

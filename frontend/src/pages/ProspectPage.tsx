@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -12,6 +13,7 @@ import { useToast } from "@/components/ui/Toast";
 import { Spokes } from "@/components/ui/Spinner";
 import { Mail, Phone, RefreshCw } from "lucide-react";
 import { ActionsMenu } from "@/components/common/ActionsMenu";
+import { CampaignSelect } from "@/components/common/CampaignSelect";
 
 type StatusFilter = string | "all";
 
@@ -24,6 +26,7 @@ interface Prospect {
   email?: string;
   status?: string;
   source?: string;
+  campaign_id?: string | null;
   campaign_type?: string;
   notes?: string;
   dnc?: boolean;
@@ -60,6 +63,13 @@ export function ProspectPage() {
     ? mapLeadProspectStatusOptions(meta.fields["coldCallStatus"])
     : [];
 
+  // Fetch campaigns for assignment
+  const { data: campaigns } = useQuery({
+    queryKey: ["campaigns"],
+    queryFn: async () => api.campaigns.list(),
+    staleTime: Infinity,
+  });
+
   const [showForm, setShowForm] = useState(false);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -71,7 +81,8 @@ export function ProspectPage() {
     { key: 'company', label: 'Company', visible: true },
     { key: 'phone', label: 'Phone', visible: true },
     { key: 'status', label: 'Status', visible: true },
-    { key: 'type', label: 'Type', visible: true },
+    { key: 'type', label: 'Industry', visible: true },
+    { key: 'campaign', label: 'Campaign', visible: true },
   ]);
 
   const isVisible = (key: string) => columns.find(c => c.key === key)?.visible ?? true;
@@ -110,6 +121,17 @@ export function ProspectPage() {
     await api.prospects.update(prospectId, { status: newStatus as any });
     queryClient.invalidateQueries({ queryKey: ["prospects"] });
     success("Status updated", `Status changed to "${newStatus}"`);
+  }
+
+  async function handleCampaignChange(prospectId: string, campaignId: string | null) {
+    try {
+      await api.prospects.update(prospectId, { campaign_id: campaignId });
+      queryClient.invalidateQueries({ queryKey: ["prospects"] });
+      const campaignName = campaignId ? (campaigns.find(c => c.id === campaignId)?.name || campaignId) : "None";
+      success("Campaign updated", `Campaign set to "${campaignName}"`);
+    } catch (err) {
+      toastError("Error", "Failed to update campaign");
+    }
   }
 
   async function handleSyncFromTwenty() {
@@ -250,14 +272,15 @@ export function ProspectPage() {
               {isVisible('company') && <th className="px-3 text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-secondary)]">Company</th>}
               {isVisible('phone') && <th className="px-3 text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-secondary)]">Phone</th>}
               {isVisible('status') && <th className="px-3 text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-secondary)]">Status</th>}
-              {isVisible('type') && <th className="px-3 text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-secondary)]">Type</th>}
+              {isVisible('type') && <th className="px-3 text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-secondary)]">Industry</th>}
+              {isVisible('campaign') && <th className="px-3 text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-secondary)]">Campaign</th>}
               <th className="w-16 px-3 text-right text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-secondary)]">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--ods-border)]">
             {isLoading ? (
               <tr>
-                <td colSpan={7} className="text-center py-8">
+                <td colSpan={8} className="text-center py-8">
                   <Spokes className="h-8 w-8 text-[var(--ods-brand-600)] mx-auto" />
                 </td>
               </tr>
@@ -298,10 +321,19 @@ export function ProspectPage() {
                   </td>
                 )}
                 {isVisible('type') && (
-                  <td className="px-3 text-[13px] text-[var(--ods-text-secondary)]">
+                  <td className="px-3">
                     <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] text-[11px] font-medium bg-[var(--ods-bg-secondary)] border border-[var(--ods-border)] text-[var(--ods-text-primary)]">
                       {prospect.source || "—"}
                     </span>
+                  </td>
+                )}
+                {isVisible('campaign') && (
+                  <td className="px-3">
+                    <CampaignSelect
+                      campaigns={campaigns}
+                      value={prospect.campaign_id}
+                      onChange={(campaignId) => handleCampaignChange(prospect.id, campaignId)}
+                    />
                   </td>
                 )}
                 <td className="w-16 px-3 text-right">
@@ -323,6 +355,7 @@ export function ProspectPage() {
                       leadName={`${prospect.first_name} ${prospect.last_name}`}
                       onView={(id) => navigate(`/prospects/${id}`)}
                       onDelete={(id, name) => setDeleteConfirm({ id, name })}
+                      data={prospect}
                     />
                   </div>
                 </td>

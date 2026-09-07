@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/apiClient";
 import { Softphone } from "@/components/softphone/Softphone";
+import { CallScriptViewer } from "@/components/scripts/CallScriptViewer";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { StatusSelect } from "@/components/common/StatusSelect";
 import { mapLeadProspectStatusOptions } from "@/lib/twentyOptions";
@@ -12,7 +13,7 @@ import { WidgetCard } from "@/components/ui/WidgetCard";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Badge } from "@/components/ui/Badge";
-import { ArrowLeft, Edit3, Trash2, FileText } from "lucide-react";
+import { ArrowLeft, Edit3, Trash2, FileText, Phone, Mail, Globe, MapPin } from "lucide-react";
 import { Spokes } from "@/components/ui/Spinner";
 import { useToast } from "@/components/ui/Toast";
 
@@ -25,6 +26,7 @@ interface Prospect {
   email?: string;
   status?: string;
   source?: string;
+  campaign_id?: string | null;
   campaign_type?: string;
   notes?: string;
   dnc?: boolean;
@@ -40,7 +42,15 @@ export function ProspectDetailPage() {
   const { success, error: toastError } = useToast();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
+  const [showScript, setShowScript] = useState(false);
   const [editingData, setEditingData] = useState<Partial<Prospect>>({});
+
+  // Fetch campaigns to resolve campaign_id to name
+  const { data: campaigns } = useQuery({
+    queryKey: ["campaigns"],
+    queryFn: async () => api.campaigns.list(),
+    staleTime: Infinity,
+  });
 
   const { data: prospect, isLoading } = useQuery<Prospect>({
     queryKey: ["prospect", prospectId],
@@ -48,8 +58,11 @@ export function ProspectDetailPage() {
     staleTime: 0,
   });
 
+  const campaignName = prospect?.campaign_id ? campaigns?.find(c => c.id === prospect.campaign_id)?.name : undefined;
+
   React.useEffect(() => {
     if (prospect) console.log("ProspectDetailPage data:", JSON.stringify(prospect, null, 2));
+    if (prospect) console.log("ProspectDetailPage campaign_id:", prospect.campaign_id);
   }, [prospect]);
 
   // Fetch status options from Twenty CRM
@@ -181,6 +194,15 @@ export function ProspectDetailPage() {
         <div className="lg:col-span-2 flex flex-col gap-[var(--ods-sp-6)]">
           <Softphone lead={prospect as any} onCallEnd={handleCallEnd} />
 
+          <WidgetCard title="Call Script" icon={FileText}>
+            <button
+              onClick={() => setShowScript(true)}
+              className="text-[13px] text-[var(--ods-brand-600)] hover:text-[var(--ods-brand-700)] font-medium"
+            >
+              View Script →
+            </button>
+          </WidgetCard>
+
           <WidgetCard title="Notes" icon={FileText}>
             <p className="text-[13px] text-[var(--ods-text-secondary)] whitespace-pre-wrap">
               {prospect.notes ?? "No notes yet"}
@@ -213,10 +235,23 @@ export function ProspectDetailPage() {
                 </div>
               )}
 
+              {/* Campaign Badge */}
+              {prospect.campaign_id && (
+                <div>
+                  <dt className="text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-tertiary)] mb-2">
+                    Campaign
+                  </dt>
+                  <Badge variant="blue">{campaignName || prospect.campaign_id.substring(0, 8) + "..."}</Badge>
+                </div>
+              )}
+
               <dl className="flex flex-col gap-[var(--ods-sp-3)]">
                 {[
+                  ["Company", prospect.company ?? "—"],
                   ["Phone", prospect.phone ?? "—"],
                   ["Email", prospect.email ?? "—"],
+                  ["City", prospect.city ?? "—"],
+                  ["State", prospect.state ?? "—"],
                   ["Created", prospect.created_at ? new Date(prospect.created_at).toLocaleDateString() : "—"],
                 ].map(([label, value]) => (
                   <div key={label}>
@@ -227,6 +262,43 @@ export function ProspectDetailPage() {
                   </div>
                 ))}
               </dl>
+            </div>
+          </WidgetCard>
+
+          <WidgetCard title="Contact Info">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-[var(--ods-sp-3)]">
+              {prospect.phone && (
+                <div className="flex items-center gap-2 text-[13px]">
+                  <Phone className="w-4 h-4 text-[var(--ods-text-tertiary)]" />
+                  <a href={`tel:${prospect.phone}`} className="text-[var(--ods-text-secondary)] hover:text-[var(--ods-brand-600)]" target="_blank" rel="noopener noreferrer">
+                    {prospect.phone}
+                  </a>
+                </div>
+              )}
+              {prospect.email && (
+                <div className="flex items-center gap-2 text-[13px]">
+                  <Mail className="w-4 h-4 text-[var(--ods-text-tertiary)]" />
+                  <a href={`mailto:${prospect.email}`} className="text-[var(--ods-text-secondary)] hover:text-[var(--ods-brand-600)]" target="_blank" rel="noopener noreferrer">
+                    {prospect.email || "—"}
+                  </a>
+                </div>
+              )}
+              {prospect.website && (
+                <div className="flex items-center gap-2 text-[13px]">
+                  <Globe className="w-4 h-4 text-[var(--ods-text-tertiary)]" />
+                  <a href={prospect.website} className="text-[var(--ods-text-secondary)] hover:text-[var(--ods-brand-600)]" target="_blank" rel="noopener noreferrer">
+                    {prospect.website}
+                  </a>
+                </div>
+              )}
+              {(prospect.address || prospect.city || prospect.state || prospect.zip) && (
+                <div className="flex items-center gap-2 text-[13px]">
+                  <MapPin className="w-4 h-4 text-[var(--ods-text-tertiary)]" />
+                  <span className="text-[var(--ods-text-secondary)]">
+                    {[prospect.address, prospect.city, prospect.state, prospect.zip].filter(Boolean).join(", ") || "—"}
+                  </span>
+                </div>
+              )}
             </div>
           </WidgetCard>
         </div>
@@ -283,6 +355,8 @@ export function ProspectDetailPage() {
           onCancel={() => setShowDeleteConfirm(false)}
         />
       )}
+
+      {showScript && <CallScriptViewer onClose={() => setShowScript(false)} campaignId={prospect?.campaign_id ?? null} />}
     </PageCanvas>
   );
 }
