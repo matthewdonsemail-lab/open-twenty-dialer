@@ -114,7 +114,7 @@ router.patch("/:id", async (req: AuthRequest, res) => {
 
     const payload: any = {};
     if (name !== undefined) payload.name = name;
-    if (campaignId !== undefined) payload.campaignId = campaignId;
+    if (campaignId !== undefined) payload.campaignId = campaignId || null;
     if (scriptData !== undefined) payload.scriptData = JSON.stringify(scriptData);
 
     if (Object.keys(payload).length === 0) {

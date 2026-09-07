@@ -164,6 +164,50 @@ export async function createTextField(params: {
 }
 
 /**
+ * Create a RELATION field
+ */
+export async function createRelationField(params: {
+  objectMetadataId: string;
+  name: string;
+  label: string;
+  description?: string;
+  relatedObjectMetadataId: string;
+}): Promise<{ id: string }> {
+  const mutation = `
+    mutation {
+      createOneField(input: {
+        field: {
+          objectMetadataId: "${params.objectMetadataId}"
+          type: RELATION
+          name: "${params.name}"
+          label: "${params.label}"
+          description: "${params.description || ''}"
+          isNullable: true
+          settings: {
+            relationType: "MANY_TO_ONE"
+            onDelete: "SET_NULL"
+            joinColumnName: "${params.name}"
+          }
+          relationCreationPayload: {
+            targetObjectMetadataId: "${params.relatedObjectMetadataId}"
+            targetFieldLabel: "Name"
+            targetFieldIcon: "IconBuildingSkyscraper"
+            type: "MANY_TO_ONE"
+          }
+        }
+      }) {
+        id
+        name
+      }
+    }
+  `;
+
+  const result = await graphqlMutation(mutation);
+  log.info(`Created relation field ${params.name} on object ${params.objectMetadataId}`);
+  return { id: result.createOneField.id };
+}
+
+/**
  * Check if object exists and get its ID
  */
 export async function getOrCreateObject(params: {
@@ -241,6 +285,24 @@ export async function setupTwentyCRM(): Promise<{
       icon: "IconFileText",
     });
     results.objects.push({ name: "agencyScripts", id: scriptsObj.id, isNew: scriptsObj.isNew });
+
+    // 4a. Create campaignId relation field on agencyScripts
+    try {
+      await createRelationField({
+        objectMetadataId: scriptsObj.id,
+        name: "campaignId",
+        label: "Campaign",
+        description: "Link to agency campaign",
+        relatedObjectMetadataId: campaignsObj.id,
+      });
+      results.fields.push({ object: "agencyScripts", name: "campaignId", isNew: true });
+    } catch (err: any) {
+      if (err.message?.includes("already exists")) {
+        results.fields.push({ object: "agencyScripts", name: "campaignId", isNew: false });
+      } else {
+        throw err;
+      }
+    }
 
     // 5. Create SELECT fields for agencyProspects
     const prospectFields = [
