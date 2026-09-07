@@ -1,38 +1,37 @@
 # twenty-dialer
 
-A browser-based cold calling dialer with bidirectional sync to Twenty CRM. Designed for sales teams to manage outbound calling campaigns with prospects and leads.
+A browser-based cold calling dialer with direct integration to Twenty CRM. Designed for sales teams to manage outbound calling campaigns with prospects and leads.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: MIT](https://img.shields.io/badge/LICENSE-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen.svg)](https://nodejs.org/)
 
 ---
 
 ## Overview
 
-twenty-dialer is a self-hosted cold calling application that integrates seamlessly with Twenty CRM. It operates as an iframe within Twenty, providing:
+twenty-dialer is a self-hosted cold calling application that integrates directly with Twenty CRM via REST API. It provides:
 
 - Browser-based softphone via SIP/WebRTC
 - Prospect and lead lifecycle management
-- Bidirectional sync with Twenty's `agencyProspects` and `agencyLeads`
+- Campaign organization with dynamic status options
 - Call logging and script management
-- Campaign organization
+- Industry tracking for prospects and leads
 
-**Key distinction:** twenty-dialer uses a custom `coldCallStatus` field for manual cold calling workflows, separate from Twenty's built-in `outboundState` used by the automated SMS/video pipeline.
+**Key distinction:** twenty-dialer uses Twenty's `coldCallStatus` field for manual cold calling workflows, separate from the automated SMS/video pipeline.
 
 ---
 
 ## Features
 
 - **Browser Softphone** — WebRTC/SIP calling directly from the browser
-- **Prospect Management** — Full CRUD for cold call targets
+- **Prospect Management** — Full CRUD for cold call targets with industry tracking
 - **Lead Management** — Track converted prospects with detailed history
-- **Campaign Organization** — Group calls by campaign
+- **Campaign Organization** — Group calls by campaign with status management
 - **Call Logging** — Record outcomes, durations, and notes
-- **Script Templates** — objection handling for common scenarios
-- **Twenty CRM Sync** — Bidirectional sync with custom `coldCallStatus` field
-- **CSV Import** — Bulk import prospects and leads
+- **Script Templates** — Objection handling for common scenarios
+- **Twenty CRM Sync** — Direct REST API integration with Twenty
+- **Dynamic Status Options** — Statuses fetched from Twenty metadata API
 - **REST API** — Full API for integrations
-- **Docker Support** — One-command deployment
 
 ---
 
@@ -43,61 +42,159 @@ flowchart TB
     subgraph frontend [Frontend - React/Vite]
         ProspectsPage[Prospects Page]
         LeadsPage[Leads Page]
+        CampaignsPage[Campaigns Page]
         Softphone[Softphone UI]
     end
 
-    subgraph backend [Backend - Express/SQLite]
+    subgraph backend [Backend - Express/TypeScript]
         API[REST API]
-        SyncService[Sync Service]
-        DB[(SQLite)]
+        TwentyClient[Twenty Client]
+        Auth[Auth Middleware]
     end
 
     subgraph twenty [Twenty CRM]
         agencyProspects[agencyProspects]
         agencyLeads[agencyLeads]
         agencyCampaigns[agencyCampaigns]
+        agencyScripts[agencyScripts]
+        Metadata[Metadata API]
     end
 
     ProspectsPage -->|HTTP| API
     LeadsPage -->|HTTP| API
+    CampaignsPage -->|HTTP| API
     Softphone -->|SIP/WebRTC| Provider[SIP Provider]
 
-    API -->|CRUD| DB
-    API -->|Sync| SyncService
-    SyncService -->|REST API| agencyProspects
-    SyncService -->|REST API| agencyLeads
-    SyncService -->|REST API| agencyCampaigns
+    API -->|CRUD| TwentyClient
+    TwentyClient -->|REST API| agencyProspects
+    TwentyClient -->|REST API| agencyLeads
+    TwentyClient -->|REST API| agencyCampaigns
+    TwentyClient -->|REST API| agencyScripts
+    TwentyClient -->|Metadata| Metadata
 ```
 
 ### Data Flow
 
 ```
-Create/Update Prospect
+User Action (Prospect/Lead/Campaign)
+         ↓
+   Frontend React UI
          ↓
    REST API (Express)
          ↓
-   SQLite Database
+   Twenty Client
          ↓
-   Sync Service
-         ↓
-   Twenty CRM (agencyProspects)
+   Twenty CRM (REST API)
 ```
+
+---
+
+## Twenty CRM Objects
+
+The following custom objects are used in Twenty CRM:
+
+### agencyProspects
+
+Template-site prospect rows. Represents discovered business targets for cold calling.
+
+**Key Fields:**
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | TEXT | Full company name |
+| `phone` | TEXT | Primary phone number |
+| `email` | TEXT | Business email address |
+| `website` | TEXT | Company website URL |
+| `fullAddress` | TEXT | Full address (comma-separated) |
+| `city` | TEXT | City name |
+| `region` | TEXT | State/region |
+| `country` | TEXT | Country code (US) |
+| `niche` | TEXT | Industry/type (e.g., "Auto Paint & Body Shops") |
+| `rating` | NUMBER | Google review rating |
+| `reviewCount` | NUMBER | Number of reviews |
+| `coldCallStatus` | SELECT | Call status (see Status Mapping below) |
+| `outboundState` | TEXT | Call outcome tracking |
+| `outboundLabel` | TEXT | Call notes/label |
+| `externalId` | TEXT | Source system identifier |
+| `utmSource` | TEXT | Campaign source (outbound/inbound) |
+
+### agencyLeads
+
+Converted prospects that have shown interest.
+
+**Key Fields:**
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | TEXT | Full contact name |
+| `contactName` | TEXT | Alternative contact name |
+| `email` | TEXT | Email address |
+| `phone` | TEXT | Phone number |
+| `company` | TEXT | Company name |
+| `source` | TEXT | Lead source |
+| `note` | TEXT | Call notes |
+| `status` | TEXT | Lead status |
+| `coldCallStatus` | SELECT | Cold call status |
+| `createdById` | TEXT | Campaign ID reference |
+
+### agencyCampaigns
+
+Campaign definitions for organizing calling efforts.
+
+**Key Fields:**
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | TEXT | Campaign name |
+| `status` | SELECT | Campaign status (see Status Mapping below) |
+| `campaignType` | SELECT | Campaign type (see Status Mapping below) |
+| `note` | TEXT | Campaign notes/settings (JSON) |
+| `utmSource` | TEXT | Campaign source tracking |
+
+### agencyScripts
+
+Call scripts linked to campaigns.
+
+**Key Fields:**
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | TEXT | Script name |
+| `scriptData` | TEXT | JSON with script content + objection responses |
+| `campaignId` | RELATION | Link to agencyCampaign |
 
 ---
 
 ## Status Mapping
 
-twenty-dialer tracks manual calling outcomes via `coldCallStatus`, separate from the SMS pipeline:
+### agencyProspects.coldCallStatus
 
-| Status | Value | Meaning |
-|--------|-------|---------|
-| `new` | `NEW` | Fresh prospect, no contact made |
-| `contacted` | `CONTACTED` | Initial contact made |
-| `interested` | `INTERESTED` | Prospect showed interest |
-| `not_interested` | `NOT_INTERESTED` | Prospect declined |
-| `callback` | `CALLBACK` | Scheduled callback needed |
-| `converted` | `CONVERTED` | Became a lead |
-| `do_not_contact` | `DO_NOT_CONTACT` | DNC flagged |
+| Value | Display | Meaning |
+|-------|---------|---------|
+| `NEW` | New | Fresh prospect, no contact made |
+| `CONTACTED` | Contacted | Initial contact made |
+| `INTERESTED` | Interested | Prospect showed interest |
+| `NOT_INTERESTED` | Not Interested | Prospect declined |
+| `CALLBACK` | Callback | Scheduled callback needed |
+| `CONVERTED` | Converted | Became a lead |
+| `DO_NOT_CONTACT` | Do Not Contact | DNC flagged |
+
+### agencyCampaigns.status
+
+| Value | Display | Meaning |
+|-------|---------|---------|
+| `ACTIVE` | Active | Campaign is running |
+| `INACTIVE` | Paused | Campaign is paused |
+| `DRAFT` | Draft | Campaign not yet started |
+
+### agencyCampaigns.campaignType
+
+| Value | Display |
+|-------|---------|
+| `OUTBOUND` | Outbound |
+| `INBOUND` | Inbound |
+| `BLENDED` | Blended |
+| `REFERRAL` | Referral |
+| `COLD_CALL` | Cold Call |
+| `WEBSITE` | Website |
+| `TWENTY_IMPORT` | Twenty Import |
+| `OTHER` | Other |
 
 ---
 
@@ -107,7 +204,7 @@ twenty-dialer tracks manual calling outcomes via `coldCallStatus`, separate from
 
 - Node.js 20+
 - npm or pnpm
-- Twenty CRM instance with `agencyProspects` and `agencyLeads` objects
+- Twenty CRM instance with custom objects configured
 - SIP provider (SignalWire, Telnyx, Twilio, or any SIP server)
 
 ### Installation
@@ -152,21 +249,27 @@ docker compose exec backend npm run seed
 
 ### Environment Variables
 
-Create `.env.local` in the project root:
+Create `.env.local` in the respective directory:
 
+**Backend (.env.local):**
 ```env
-# Twenty CRM
-TWENTY_BASE_URL=https://twenty.inferencesaver.com/rest
+# Twenty CRM (required)
+TWENTY_BASE_URL=https://twenty.inferencesaver.com
 TWENTY_API_KEY=your-api-key-here
 
-# Sync Settings
+# Twenty Postgres — for user verification
+TWENTY_DATABASE_URL=postgres://dialer_ro:your-password@node01:5432/twenty
+
+# Sync settings
 SYNC_POLL_INTERVAL_MS=30000
 
 # Backend
 PORT=4000
-JWT_SECRET=your-jwt-secret
+JWT_SECRET=your-jwt-secret-here
+```
 
-# Frontend
+**Frontend (.env.local):**
+```env
 VITE_API_URL=http://localhost:4000
 VITE_SIP_URI=sip:your-extension@your-domain.sip.signalwire.com
 VITE_SIP_PASSWORD=your-password
@@ -187,23 +290,33 @@ See [SIP Providers Guide](docs/sip-providers.md) for detailed setup.
 open-twenty-dialer/
 ├── backend/                    # Express API server
 │   ├── src/
-│   │   ├── db/                # SQLite schema + migrations
+│   │   ├── lib/               # Twenty client, logger
 │   │   ├── middleware/        # Auth middleware
-│   │   ├── routes/            # REST API routes
-│   │   └── sync/              # Twenty CRM sync modules
-│   │       ├── prospects.ts   # Prospect sync logic
-│   │       ├── leads.ts       # Lead sync logic
-│   │       └── inbound.ts     # Inbound sync pollers
-│   └── scripts/               # Migration scripts
+│   │   └── routes/            # REST API routes
+│   │       ├── auth.ts
+│   │       ├── campaigns.ts
+│   │       ├── leads.ts
+│   │       ├── prospects.ts
+│   │       ├── scripts.ts
+│   │       ├── twentyMeta.ts
+│   │       └── twentyPhones.ts
+│   └── .env.example
 ├── frontend/                   # React/Vite SPA
 │   └── src/
 │       ├── components/        # UI components
-│       ├── pages/             # Route pages
-│       └── lib/               # API client
+│       ├── hooks/             # React Query hooks
+│       ├── lib/               # API client, utilities
+│       └── pages/             # Route pages
+│           ├── CampaignPage.tsx
+│           ├── LeadDetailPage.tsx
+│           ├── LeadsPage.tsx
+│           ├── ProspectDetailPage.tsx
+│           ├── ProspectPage.tsx
+│           └── ScriptsPage.tsx
 ├── docs/
-│   └── okf/datamodel/         # OKF documentation
-├── docker/                     # Docker configuration
-└── .env.local                 # Environment config (gitignored)
+├── .env.example
+├── .gitignore
+└── README.md
 ```
 
 ---
@@ -227,7 +340,6 @@ open-twenty-dialer/
 | POST | `/api/prospects` | Create prospect |
 | PATCH | `/api/prospects/:id` | Update prospect |
 | DELETE | `/api/prospects/:id` | Delete prospect |
-| POST | `/api/prospects/import` | Bulk import from CSV |
 
 ### Leads
 
@@ -239,54 +351,89 @@ open-twenty-dialer/
 | PATCH | `/api/leads/:id` | Update lead |
 | DELETE | `/api/leads/:id` | Delete lead |
 
-### Sync
+### Campaigns
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/sync/inbound` | Trigger manual inbound sync |
-| GET | `/api/sync/status` | Get sync status |
+| GET | `/api/campaigns` | List all campaigns |
+| GET | `/api/campaigns/:id` | Get single campaign |
+| POST | `/api/campaigns` | Create campaign |
+| PATCH | `/api/campaigns/:id` | Update campaign |
+| DELETE | `/api/campaigns/:id` | Delete campaign |
+
+### Scripts
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/scripts` | List all scripts |
+| GET | `/api/scripts/:id` | Get single script |
+| POST | `/api/scripts` | Create script |
+| PATCH | `/api/scripts/:id` | Update script |
+| DELETE | `/api/scripts/:id` | Delete script |
+
+### Twenty Integration
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/twenty/meta/:object` | Get field metadata for object |
+| GET | `/api/twenty/phones` | List available phone numbers |
 
 ---
 
-## Roadmap
+## Twenty CRM Setup
 
-- [x] Prospect/lead management
-- [x] Twenty CRM bidirectional sync
-- [x] Custom `coldCallStatus` field
-- [x] Campaign management
-- [x] Call logging
-- [ ] Audio device selector (mic/speaker)
-- [ ] Call recording
-- [ ] Parallel dialing (power dialer mode)
-- [ ] Voicemail detection
-- [ ] Webhook-based sync triggers
-- [ ] AI-powered call summaries
+### Creating Custom Objects
 
----
+To set up the required custom objects in Twenty CRM, use the GraphQL metadata API:
 
-## Development
-
-### Running Tests
-
-```bash
-cd backend
-npm test
-
-cd frontend
-npm test
+```graphql
+mutation {
+  createOneObject(input: {
+    object: {
+      nameSingular: "agencyProspect"
+      namePlural: "agencyProspects"
+      labelSingular: "Prospect"
+      labelPlural: "Prospects"
+      description: "Cold call prospects"
+      icon: "IconBuildingSkyscraper"
+      isLabelSyncedWithName: false
+    }
+  }) {
+    id
+    nameSingular
+  }
+}
 ```
 
-### Linting
+Repeat for `agencyLeads`, `agencyCampaigns`, and `agencyScripts`.
 
-```bash
-npm run lint
+### Adding SELECT Fields
+
+Create SELECT fields using the metadata API. Example for campaign status:
+
+```graphql
+mutation {
+  createOneField(input: {
+    field: {
+      objectMetadataId: "<campaign-object-id>"
+      type: SELECT
+      name: "status"
+      label: "Status"
+      isNullable: true
+      options: [
+        { label: "Active", value: "ACTIVE", color: "green", position: 0 }
+        { label: "Inactive", value: "INACTIVE", color: "gray", position: 1 }
+        { label: "Draft", value: "DRAFT", color: "amber", position: 2 }
+      ]
+    }
+  }) {
+    id
+    name
+  }
+}
 ```
 
-### Building
-
-```bash
-npm run build
-```
+See [Twenty Metadata API Reference](docs/twenty-workflows/metadata-operations.md) for full details.
 
 ---
 
@@ -306,28 +453,25 @@ MIT License — see [LICENSE](LICENSE) for details.
 
 #### 1. Nginx Proxy Port Mismatch (Most Common)
 
-The `auth-guard` container (nginx) must proxy Twenty requests to the correct port. Common mistake:
+The `auth-guard` container (nginx) must proxy Twenty requests to the correct port.
 
 ```nginx
-# WRONG - old default port
-proxy_pass http://127.0.0.1:13000;
-
 # CORRECT - actual Twenty server port
 proxy_pass http://127.0.0.1:3005;
 ```
 
 **Fix:** Update the nginx config in `/home/deepman/services/auth-guard/nginx.conf` and restart:
+
 ```bash
-# Copy updated config
-scp ops/node01/auth-guard-nginx.conf deepman@node01:/tmp/nginx.conf
 tailscale ssh deepman@node01 "docker restart auth-guard"
 ```
 
 #### 2. Verify API Key is Valid
 
 Test your API key directly against Twenty:
+
 ```bash
-curl -s "https://twenty.yourdomain.com/rest/agencyProspects?limit=1" \
+curl.exe -s "https://twenty.inferencesaver.com/rest/agencyProspects?limit=1" \
   -H "Authorization: Bearer YOUR_API_KEY"
 ```
 
@@ -336,33 +480,18 @@ Should return `200 OK` with data or empty array, NOT `401` or `403`.
 #### 3. Check Twenty Server Status
 
 Ensure Twenty containers are running:
+
 ```bash
 docker ps | grep twenty
 # Should show: twenty-server, twenty-worker, twenty-postgres, twenty-redis
 ```
 
 If server is down:
+
 ```bash
 cd /home/deepman/services/twenty
 docker compose up -d server
 ```
-
-#### 4. Database Connection
-
-The backend connects to Twenty's PostgreSQL for user verification:
-```bash
-# Test connection
-docker exec twenty-postgres psql -U twenty -d twenty -c "SELECT 1;"
-```
-
-### Nginx Configuration Files
-
-**Location:** `/home/deepman/services/auth-guard/nginx.conf`
-
-**Key settings for Twenty proxy:**
-- Listen port: `3000`
-- Proxy path: `/rest`, `/graphql`, `/metadata`, `/webhooks`
-- Backend: `http://127.0.0.1:3005` (NOT 13000)
 
 ### Common Error Messages
 
@@ -377,7 +506,6 @@ docker exec twenty-postgres psql -U twenty -d twenty -c "SELECT 1;"
 
 ## Documentation
 
-- [Data Model](docs/okf/datamodel/open-cold-dialer.md) — Detailed architecture and sync documentation
 - [SIP Providers Guide](docs/sip-providers.md) — Configure your SIP provider
 - [Twenty CRM Integration](docs/twenty-integration.md) — Sync configuration guide
-- [Twenty Troubleshooting](docs/twenty-troubleshooting.md) — Common issues and fixes (401/403 errors, nginx config, API keys)
+- [Twenty Troubleshooting](docs/twenty-troubleshooting.md) — Common issues and fixes

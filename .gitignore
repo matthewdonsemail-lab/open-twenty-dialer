@@ -19,3 +19,5 @@ ops/
 test-*.js
 test-*.mjs
 test-pg.*
+.scratch/
+backend/scripts/
