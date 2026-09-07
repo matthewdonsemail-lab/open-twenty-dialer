@@ -1,17 +1,53 @@
-import React, { useState } from "react";
-import { BookOpen, AlertTriangle, Search, Plus } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { BookOpen, AlertTriangle, Search, Plus, Trash2, Save, X } from "lucide-react";
 import { PageCanvas } from "@/components/common/PageCanvas";
 import { WidgetCard } from "@/components/ui/WidgetCard";
+import { Button } from "@/components/ui/Button";
+import { StatusSelect } from "@/components/common/StatusSelect";
+import { api } from "@/lib/apiClient";
 import { useScripts, Script } from "@/hooks/useScripts";
-import { useCreateScript, useDeleteScript } from "@/hooks/useScripts";
+import { useCreateScript, useDeleteScript, useUpdateScript } from "@/hooks/useScripts";
+
+interface Campaign {
+  id: string;
+  name: string;
+}
 
 export function ScriptsPage() {
   const { data: scripts, isLoading } = useScripts();
   const createScript = useCreateScript();
+  const updateScript = useUpdateScript();
   const deleteScript = useDeleteScript();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedScript, setSelectedScript] = useState<Script | null>(null);
   const [activeObjection, setActiveObjection] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState<any>(null);
+  const [categories, setCategories] = useState<string[]>(["General", "Objection Handling", "Introduction", "Follow-up", "Closing"]);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [saving, setSaving] = useState(false);
+
+  // Load campaigns for selector
+  useEffect(() => {
+    api.campaigns.list().then((data) => {
+      setCampaigns(data.map((c: any) => ({ id: c.id, name: c.name })));
+    }).catch(console.error);
+  }, []);
+
+  // Initialize edit form when selecting a script
+  useEffect(() => {
+    if (selectedScript) {
+      setEditForm({
+        name: selectedScript.name,
+        campaignId: selectedScript.campaignId,
+        scriptData: {
+          content: selectedScript.scriptData?.content || "",
+          category: selectedScript.scriptData?.category || "General",
+          objection_responses: selectedScript.scriptData?.objection_responses || {},
+        },
+      });
+    }
+  }, [selectedScript]);
 
   const filtered = (scripts || []).filter(
     (s) =>
@@ -19,8 +55,8 @@ export function ScriptsPage() {
       (s.scriptData?.category?.toLowerCase() || "").includes(searchQuery.toLowerCase())
   );
 
-  const objections = selectedScript
-    ? Object.entries(selectedScript.scriptData?.objection_responses ?? {})
+  const objections = editForm?.scriptData?.objection_responses
+    ? Object.entries(editForm.scriptData.objection_responses)
     : [];
 
   const handleCreateScript = () => {
@@ -40,6 +76,92 @@ export function ScriptsPage() {
     deleteScript.mutate(id);
     if (selectedScript?.id === id) {
       setSelectedScript(null);
+      setIsEditing(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!selectedScript || !editForm) return;
+    setSaving(true);
+    try {
+      await updateScript.mutateAsync({
+        id: selectedScript.id,
+        data: {
+          name: editForm.name,
+          campaignId: editForm.campaignId,
+          scriptData: editForm.scriptData,
+        },
+      });
+      setIsEditing(false);
+    } catch (err) {
+      console.error("Failed to save script:", err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCancel = () => {
+    setIsEditing(false);
+    if (selectedScript) {
+      setEditForm({
+        name: selectedScript.name,
+        campaignId: selectedScript.campaignId,
+        scriptData: {
+          content: selectedScript.scriptData?.content || "",
+          category: selectedScript.scriptData?.category || "General",
+          objection_responses: selectedScript.scriptData?.objection_responses || {},
+        },
+      });
+    }
+  };
+
+  const addObjection = () => {
+    const objection = prompt("Enter objection:");
+    if (!objection) return;
+    const response = prompt("Enter response:");
+    if (editForm) {
+      setEditForm({
+        ...editForm,
+        scriptData: {
+          ...editForm.scriptData,
+          objection_responses: {
+            ...editForm.scriptData.objection_responses,
+            [objection]: { response: response || "", category: editForm.scriptData.category },
+          },
+        },
+      });
+    }
+  };
+
+  const removeObjection = (objection: string) => {
+    if (editForm) {
+      const newResponses = { ...editForm.scriptData.objection_responses };
+      delete newResponses[objection];
+      setEditForm({
+        ...editForm,
+        scriptData: {
+          ...editForm.scriptData,
+          objection_responses: newResponses,
+        },
+      });
+    }
+  };
+
+  const updateObjection = (objection: string, field: string, value: string) => {
+    if (editForm) {
+      setEditForm({
+        ...editForm,
+        scriptData: {
+          ...editForm.scriptData,
+          objection_responses: {
+            ...editForm.scriptData.objection_responses,
+            [objection]: {
+              ...editForm.scriptData.objection_responses[objection],
+              [field]: value,
+            },
+          },
+        },
+      });
     }
   };
 
@@ -83,8 +205,11 @@ export function ScriptsPage() {
                 onClick={() => {
                   setSelectedScript(script);
                   setActiveObjection(null);
+                  setIsEditing(false);
                 }}
-                className="text-left bg-[var(--ods-bg-secondary)] border border-[var(--ods-border)] rounded-[6px] p-4 hover:border-[var(--ods-brand-500)] transition-colors relative group"
+                className={`text-left bg-[var(--ods-bg-secondary)] border rounded-[6px] p-4 hover:border-[var(--ods-brand-500)] transition-colors relative group ${
+                  selectedScript?.id === script.id ? "border-[var(--ods-brand-500)]" : "border border-[var(--ods-border)]"
+                }`}
               >
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
@@ -98,9 +223,7 @@ export function ScriptsPage() {
                     }}
                     className="opacity-0 group-hover:opacity-100 text-[var(--ods-text-tertiary)] hover:text-red-500 transition-all"
                   >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-                    </svg>
+                    <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
                 <div className="flex items-center gap-2">
@@ -117,64 +240,220 @@ export function ScriptsPage() {
             ))}
           </div>
 
-          {selectedScript && (
+          {selectedScript && editForm && (
             <WidgetCard
-              title={selectedScript.name}
+              title={isEditing ? "Edit Script" : selectedScript.name}
               action={
-                <button
-                  onClick={() => handleDeleteScript(selectedScript.id)}
-                  disabled={deleteScript.isPending}
-                  className="h-7 px-2.5 rounded-[6px] text-[12px] font-medium text-[var(--ods-text-secondary)] hover:text-red-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Delete
-                </button>
+                <div className="flex items-center gap-2">
+                  {isEditing ? (
+                    <>
+                      <button
+                        onClick={handleSave}
+                        disabled={saving}
+                        className="h-7 px-2.5 rounded-[6px] text-[12px] font-medium bg-[var(--ods-brand-600)] text-white hover:opacity-90 transition-opacity flex items-center gap-1 disabled:opacity-50"
+                      >
+                        <Save className="w-3.5 h-3.5" />
+                        Save
+                      </button>
+                      <button
+                        onClick={handleCancel}
+                        className="h-7 px-2.5 rounded-[6px] text-[12px] font-medium text-[var(--ods-text-secondary)] hover:text-[var(--ods-text-primary)] transition-colors"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={() => setIsEditing(true)}
+                      className="h-7 px-2.5 rounded-[6px] text-[12px] font-medium text-[var(--ods-text-secondary)] hover:text-[var(--ods-text-primary)] transition-colors"
+                    >
+                      Edit
+                    </button>
+                  )}
+                  <button
+                    onClick={() => handleDeleteScript(selectedScript.id)}
+                    disabled={deleteScript.isPending}
+                    className="h-7 px-2.5 rounded-[6px] text-[12px] font-medium text-red-500 hover:bg-red-500/10 transition-colors disabled:opacity-50"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               }
               className="mb-6"
             >
               <div className="space-y-4">
-                <span className="inline-block px-2.5 py-0.5 rounded-[4px] text-[11px] font-medium bg-[var(--ods-bg-primary)] border border-[var(--ods-border)] text-[var(--ods-text-secondary)]">
-                  {selectedScript.scriptData?.category || "General"}
-                </span>
+                {/* Name Field */}
+                <div>
+                  <label className="text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-tertiary)] mb-2 block">
+                    Script Name
+                  </label>
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={editForm.name}
+                      onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                      className="w-full px-3 py-2 text-[13px] border border-[var(--ods-border)] rounded-[4px] bg-[var(--ods-bg-primary)] text-[var(--ods-text-primary)] outline-none focus:border-[var(--ods-brand-500)]"
+                    />
+                  ) : (
+                    <p className="text-[13px] text-[var(--ods-text-primary)]">{selectedScript.name}</p>
+                  )}
+                </div>
+
+                {/* Campaign Selector */}
+                <div>
+                  <label className="text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-tertiary)] mb-2 block">
+                    Campaign
+                  </label>
+                  {isEditing ? (
+                    <select
+                      value={editForm.campaignId || ""}
+                      onChange={(e) => setEditForm({ ...editForm, campaignId: e.target.value || null })}
+                      className="w-full px-3 py-2 text-[13px] border border-[var(--ods-border)] rounded-[4px] bg-[var(--ods-bg-primary)] text-[var(--ods-text-primary)] outline-none focus:border-[var(--ods-brand-500)]"
+                    >
+                      <option value="">No Campaign</option>
+                      {campaigns.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <p className="text-[13px] text-[var(--ods-text-primary)]">
+                      {campaigns.find((c) => c.id === selectedScript.campaignId)?.name || "No Campaign"}
+                    </p>
+                  )}
+                </div>
+
+                {/* Category Selector */}
+                <div>
+                  <label className="text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-tertiary)] mb-2 block">
+                    Category
+                  </label>
+                  {isEditing ? (
+                    <StatusSelect
+                      value={editForm.scriptData.category}
+                      options={categories.map((cat) => ({
+                        value: cat,
+                        label: cat,
+                        dotColor: "bg-gray-400",
+                        bgTint: "bg-gray-50",
+                        textColor: "text-gray-700",
+                      }))}
+                      onChange={(val) =>
+                        setEditForm({
+                          ...editForm,
+                          scriptData: { ...editForm.scriptData, category: val },
+                        })
+                      }
+                    />
+                  ) : (
+                    <span className="inline-block px-2.5 py-0.5 rounded-[4px] text-[11px] font-medium bg-[var(--ods-bg-primary)] border border-[var(--ods-border)] text-[var(--ods-text-secondary)]">
+                      {editForm.scriptData.category}
+                    </span>
+                  )}
+                </div>
+
+                {/* Script Content */}
                 <div>
                   <label className="text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-tertiary)] mb-2 block">
                     Script Content
                   </label>
-                  <div className="bg-[var(--ods-bg-primary)] rounded-[4px] p-3 border border-[var(--ods-border)]">
-                    <p className="text-[13px] text-[var(--ods-text-primary)] leading-relaxed whitespace-pre-wrap">
-                      {selectedScript.scriptData?.content || "No content yet"}
-                    </p>
-                  </div>
+                  {isEditing ? (
+                    <textarea
+                      value={editForm.scriptData.content}
+                      onChange={(e) =>
+                        setEditForm({
+                          ...editForm,
+                          scriptData: { ...editForm.scriptData, content: e.target.value },
+                        })
+                      }
+                      className="w-full px-3 py-2 text-[13px] border border-[var(--ods-border)] rounded-[4px] bg-[var(--ods-bg-primary)] text-[var(--ods-text-primary)] outline-none focus:border-[var(--ods-brand-500)] min-h-[120px] resize-y"
+                      placeholder="Enter script content..."
+                    />
+                  ) : (
+                    <div className="bg-[var(--ods-bg-primary)] rounded-[4px] p-3 border border-[var(--ods-border)]">
+                      <p className="text-[13px] text-[var(--ods-text-primary)] leading-relaxed whitespace-pre-wrap">
+                        {editForm.scriptData.content || "No content yet"}
+                      </p>
+                    </div>
+                  )}
                 </div>
-                {selectedScript.scriptData?.objection_responses && Object.keys(selectedScript.scriptData.objection_responses).length > 0 && (
-                  <div>
-                    <h3 className="text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-tertiary)] mb-3 flex items-center gap-2">
+
+                {/* Objections */}
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-tertiary)] flex items-center gap-2">
                       <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
                       Common Objections & Responses
                     </h3>
+                    {isEditing && (
+                      <button
+                        onClick={addObjection}
+                        className="text-[11px] text-[var(--ods-brand-600)] hover:text-[var(--ods-brand-700)]"
+                      >
+                        + Add Objection
+                      </button>
+                    )}
+                  </div>
+                  {objections.length > 0 ? (
                     <div className="space-y-2">
                       {objections.map(([objection, data]: [string, any]) => (
-                        <div key={objection}>
-                          <button
-                            onClick={() =>
-                              setActiveObjection(
-                                activeObjection === objection ? null : objection
-                              )
-                            }
-                            className="w-full text-left p-3 rounded-[4px] border border-[var(--ods-border)] hover:border-[var(--ods-brand-500)] hover:bg-[var(--ods-bg-primary)] transition text-[12px]"
-                          >
-                            <span className="font-medium text-[var(--ods-text-primary)]">"{objection}"</span>
-                            <span className="text-[11px] text-[var(--ods-text-tertiary)] ml-2">{data.category}</span>
-                          </button>
-                          {activeObjection === objection && (
-                            <div className="mt-1 p-3 bg-[var(--ods-bg-primary)] rounded-[4px] border border-[var(--ods-brand-200)] text-[12px] text-[var(--ods-text-primary)]">
-                              {data.response}
+                        <div key={objection} className="border border-[var(--ods-border)] rounded-[4px] p-3">
+                          {isEditing ? (
+                            <div className="space-y-2">
+                              <input
+                                type="text"
+                                value={objection}
+                                onChange={(e) => {
+                                  const newResponses = { ...editForm.scriptData.objection_responses };
+                                  delete newResponses[objection];
+                                  newResponses[e.target.value] = data;
+                                  setEditForm({
+                                    ...editForm,
+                                    scriptData: { ...editForm.scriptData, objection_responses: newResponses },
+                                  });
+                                }}
+                                className="w-full px-2 py-1 text-[12px] border border-[var(--ods-border)] rounded bg-[var(--ods-bg-primary)] text-[var(--ods-text-primary)]"
+                                placeholder="Objection"
+                              />
+                              <textarea
+                                value={data.response}
+                                onChange={(e) => updateObjection(objection, "response", e.target.value)}
+                                className="w-full px-2 py-1 text-[12px] border border-[var(--ods-border)] rounded bg-[var(--ods-bg-primary)] text-[var(--ods-text-primary)] min-h-[60px]"
+                                placeholder="Response"
+                              />
+                              <button
+                                onClick={() => removeObjection(objection)}
+                                className="text-[11px] text-red-500 hover:text-red-600"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          ) : (
+                            <div>
+                              <button
+                                onClick={() => setActiveObjection(activeObjection === objection ? null : objection)}
+                                className="w-full text-left"
+                              >
+                                <span className="font-medium text-[var(--ods-text-primary)]">"{objection}"</span>
+                                <span className="text-[11px] text-[var(--ods-text-tertiary)] ml-2">{data.category}</span>
+                              </button>
+                              {activeObjection === objection && (
+                                <p className="mt-1 text-[12px] text-[var(--ods-text-primary)] pl-3 border-l-2 border-[var(--ods-brand-300)]">
+                                  {data.response}
+                                </p>
+                              )}
                             </div>
                           )}
                         </div>
                       ))}
                     </div>
-                  </div>
-                )}
+                  ) : isEditing ? (
+                    <p className="text-[12px] text-[var(--ods-text-tertiary)]">No objections added yet. Click "+ Add Objection" to add one.</p>
+                  ) : (
+                    <p className="text-[12px] text-[var(--ods-text-tertiary)]">No objections yet.</p>
+                  )}
+                </div>
               </div>
             </WidgetCard>
           )}
