@@ -11,7 +11,7 @@ const log = createLogger('scripts');
 interface AgencyScript {
   id: string;
   name?: string;
-  campaignId?: string; // The relation to agencyCampaign
+  campaignIdId?: string; // The relation ID to agencyCampaign (Twenty uses {field}Id pattern)
   scriptData?: string; // JSON string containing script content
   createdAt?: string;
   updatedAt?: string;
@@ -34,7 +34,7 @@ router.get("/", async (_req, res) => {
     const mapped: ScriptListItem[] = scripts.map(s => ({
       id: s.id,
       name: s.name || "Unnamed Script",
-      campaignId: s.campaignId || null,
+      campaignId: s.campaignIdId || null,
       scriptData: s.scriptData ? JSON.parse(s.scriptData) : null,
       created_at: s.createdAt || new Date().toISOString(),
       updated_at: s.updatedAt || new Date().toISOString(),
@@ -57,7 +57,7 @@ router.get("/:id", async (req, res) => {
     const mapped: ScriptListItem = {
       id: script.id,
       name: script.name || "Unnamed Script",
-      campaignId: script.campaignId || null,
+      campaignId: script.campaignIdId || null,
       scriptData: script.scriptData ? JSON.parse(script.scriptData) : null,
       created_at: script.createdAt || new Date().toISOString(),
       updated_at: script.updatedAt || new Date().toISOString(),
@@ -81,8 +81,9 @@ router.post("/", async (req: AuthRequest, res) => {
       scriptData: scriptData ? JSON.stringify(scriptData) : undefined,
     };
 
+    // RELATION fields: use {field}Id for direct assignment in Twenty REST API
     if (campaignId) {
-      payload.campaignId = { id: campaignId };
+      payload.campaignIdId = campaignId;
     }
 
     const result = await createTwenty<any>('agencyScripts', payload);
@@ -91,7 +92,7 @@ router.post("/", async (req: AuthRequest, res) => {
     const mapped: ScriptListItem = {
       id: script.id,
       name: script.name || "New Script",
-      campaignId: script.campaignId || null,
+      campaignId: script.campaignIdId || null,
       scriptData: script.scriptData ? JSON.parse(script.scriptData) : null,
       created_at: script.createdAt || new Date().toISOString(),
       updated_at: script.updatedAt || new Date().toISOString(),
@@ -114,12 +115,12 @@ router.patch("/:id", async (req: AuthRequest, res) => {
 
     const payload: any = {};
     if (name !== undefined) payload.name = name;
-    // RELATION fields: pass the target object directly for Twenty REST API
+    // RELATION fields: use {field}Id for direct assignment in Twenty REST API
     if (campaignId !== undefined) {
       if (campaignId) {
-        payload.campaignId = { id: campaignId };
+        payload.campaignIdId = campaignId;
       } else {
-        payload.campaignId = null;
+        payload.campaignIdId = null;
       }
     }
     if (scriptData !== undefined) payload.scriptData = JSON.stringify(scriptData);
@@ -135,7 +136,7 @@ router.patch("/:id", async (req: AuthRequest, res) => {
     const mapped: ScriptListItem = {
       id: script.id,
       name: script.name || "Unnamed Script",
-      campaignId: script.campaignId || null,
+      campaignId: script.campaignIdId || null,
       scriptData: script.scriptData ? JSON.parse(script.scriptData) : null,
       created_at: script.createdAt || new Date().toISOString(),
       updated_at: script.updatedAt || new Date().toISOString(),

@@ -99,7 +99,7 @@ export async function createTwenty<T>(path: string, data: any): Promise<T> {
 }
 
 /**
- * Update a record in Twenty CRM
+ * Update a record in Twenty CRM via REST API
  */
 export async function updateTwenty<T>(path: string, id: string, data: any): Promise<T> {
   const cfg = getConfig();
@@ -125,6 +125,65 @@ export async function updateTwenty<T>(path: string, id: string, data: any): Prom
   }
 
   return response.json() as Promise<T>;
+}
+
+/**
+ * Execute a GraphQL mutation against Twenty's API (not metadata)
+ */
+export async function graphqlMutation<T>(mutation: string): Promise<T> {
+  const cfg = getConfig();
+  const url = `${cfg.twentyBaseUrl}/graphql`;
+
+  log.info(`GraphQL mutation to ${url}`);
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${cfg.twentyApiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ query: mutation }),
+  });
+
+  log.info(`GraphQL response: ${response.status}`);
+
+  if (!response.ok) {
+    const text = await response.text();
+    log.error(`GraphQL error:`, text.substring(0, 500));
+    throw new Error(`GraphQL error (${response.status}): ${text}`);
+  }
+
+  const json = await response.json();
+  if (json.errors?.length > 0) {
+    throw new Error(`GraphQL errors: ${JSON.stringify(json.errors)}`);
+  }
+
+  return json.data as T;
+}
+
+/**
+ * Update a record via GraphQL (supports relation fields with connect/disconnect)
+ */
+export async function updateTwentyGraphQL<T>(objectName: string, id: string, data: any): Promise<T> {
+  const camelCaseName = objectName.charAt(0).toUpperCase() + objectName.slice(1);
+  const setFields = Object.entries(data)
+    .map(([key, value]) => `${key}: ${JSON.stringify(value).replace(/"/g, '\\"')}`)
+    .join(", ");
+
+  const mutation = `
+    mutation {
+      updateOne${camelCaseName}(input: {
+        id: "${id}"
+        ${setFields ? `data: { ${setFields} }` : ""}
+      }) {
+        id
+      }
+    }
+  `;
+
+  const result = await graphqlMutation<any>(mutation);
+  log.info(`Updated ${objectName}/${id} via GraphQL`);
+  return result as unknown as T;
 }
 
 /**
