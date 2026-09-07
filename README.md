@@ -382,7 +382,24 @@ open-twenty-dialer/
 
 ## Twenty CRM Setup
 
-### Creating Custom Objects
+### Option 1: Via API (Recommended)
+
+The backend provides an endpoint to automatically create all required Twenty CRM objects and fields:
+
+```bash
+# Setup Twenty CRM objects and fields
+curl.exe -X POST "http://localhost:4000/api/setup/twenty" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json"
+```
+
+This will create:
+- `agencyProspects` object with `coldCallStatus` and `utmSource` fields
+- `agencyLeads` object
+- `agencyCampaigns` object with `status` and `campaignType` fields
+- `agencyScripts` object
+
+### Option 2: Via GraphQL (Manual)
 
 To set up the required custom objects in Twenty CRM, use the GraphQL metadata API:
 
