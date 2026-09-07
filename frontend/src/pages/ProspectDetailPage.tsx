@@ -5,11 +5,13 @@ import { api } from "@/lib/apiClient";
 import { Softphone } from "@/components/softphone/Softphone";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { StatusSelect } from "@/components/common/StatusSelect";
+import { mapLeadProspectStatusOptions } from "@/lib/twentyOptions";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { PageCanvas } from "@/components/common/PageCanvas";
 import { WidgetCard } from "@/components/ui/WidgetCard";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
+import { Badge } from "@/components/ui/Badge";
 import { ArrowLeft, Edit3, Trash2, FileText } from "lucide-react";
 import { Spokes } from "@/components/ui/Spinner";
 import { useToast } from "@/components/ui/Toast";
@@ -23,6 +25,7 @@ interface Prospect {
   email?: string;
   status?: string;
   source?: string;
+  campaign_type?: string;
   notes?: string;
   dnc?: boolean;
   sync_id?: string;
@@ -42,8 +45,23 @@ export function ProspectDetailPage() {
   const { data: prospect, isLoading } = useQuery<Prospect>({
     queryKey: ["prospect", prospectId],
     queryFn: () => api.prospects.get(prospectId ?? ""),
+    staleTime: 0,
+  });
+
+  React.useEffect(() => {
+    if (prospect) console.log("ProspectDetailPage data:", JSON.stringify(prospect, null, 2));
+  }, [prospect]);
+
+  // Fetch status options from Twenty CRM
+  const { data: meta } = useQuery<{ fields: Record<string, Array<{ label: string; value: string; color: string }>> }>({
+    queryKey: ["twenty-meta", "agencyProspects"],
+    queryFn: async () => api.twentyMeta.fields("agencyProspects"),
     staleTime: Infinity,
   });
+
+  const statusOptions = meta?.fields["coldCallStatus"]
+    ? mapLeadProspectStatusOptions(meta.fields["coldCallStatus"])
+    : [];
 
   const updateProspect = useMutation({
     mutationFn: (data: Partial<Prospect>) => api.prospects.update(prospectId ?? "", data),
@@ -180,16 +198,25 @@ export function ProspectDetailPage() {
                 </dt>
                 <StatusSelect
                   value={prospect.status || "new"}
+                  options={statusOptions}
                   onChange={handleStatusChange}
                 />
               </div>
 
+              {/* Industry Badge */}
+              {prospect.source && (
+                <div>
+                  <dt className="text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-tertiary)] mb-2">
+                    Industry
+                  </dt>
+                  <Badge variant="indigo">{prospect.source}</Badge>
+                </div>
+              )}
+
               <dl className="flex flex-col gap-[var(--ods-sp-3)]">
                 {[
-                  ["Company", prospect.company ?? "—"],
                   ["Phone", prospect.phone ?? "—"],
                   ["Email", prospect.email ?? "—"],
-                  ["Source", prospect.source ?? "Twenty"],
                   ["Created", prospect.created_at ? new Date(prospect.created_at).toLocaleDateString() : "—"],
                 ].map(([label, value]) => (
                   <div key={label}>

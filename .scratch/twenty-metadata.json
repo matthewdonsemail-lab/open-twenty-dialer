@@ -1,0 +1,15 @@
+﻿{
+    "errors":  [
+                   {
+                       "message":  "Token invalid.",
+                       "extensions":  {
+                                          "userFriendlyMessage":  {
+                                                                      "id":  "z+7x/s",
+                                                                      "message":  "You must be authenticated to perform this action."
+                                                                  },
+                                          "subCode":  "UNAUTHENTICATED",
+                                          "code":  "UNAUTHENTICATED"
+                                      }
+                   }
+               ]
+}

@@ -3,12 +3,13 @@ import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/apiClient";
 import { StatusSelect } from "@/components/common/StatusSelect";
+import { mapLeadProspectStatusOptions } from "@/lib/twentyOptions";
 import { RecordIndexCommandMenu } from "@/components/common/RecordIndexCommandMenu";
 import { ColumnVisibilityDropdown, ColumnDef } from "@/components/common/ColumnVisibilityDropdown";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { LeadForm } from "@/components/leads/LeadForm";
-import { CsvImport } from "@/components/leads/CsvImport";
 import { useToast } from "@/components/ui/Toast";
+import { Spokes } from "@/components/ui/Spinner";
 import { Mail, Phone, RefreshCw } from "lucide-react";
 import { ActionsMenu } from "@/components/common/ActionsMenu";
 
@@ -23,6 +24,7 @@ interface Prospect {
   email?: string;
   status?: string;
   source?: string;
+  campaign_type?: string;
   notes?: string;
   dnc?: boolean;
   sync_id?: string;
@@ -43,8 +45,22 @@ export function ProspectPage() {
     staleTime: Infinity,
   });
 
+  React.useEffect(() => {
+    if (prospects) console.log("ProspectPage data:", JSON.stringify(prospects, null, 2));
+  }, [prospects]);
+
+  // Fetch status options from Twenty CRM
+  const { data: meta } = useQuery<{ fields: Record<string, Array<{ label: string; value: string; color: string }>> }>({
+    queryKey: ["twenty-meta", "agencyProspects"],
+    queryFn: async () => api.twentyMeta.fields("agencyProspects"),
+    staleTime: Infinity,
+  });
+
+  const statusOptions = meta?.fields["coldCallStatus"]
+    ? mapLeadProspectStatusOptions(meta.fields["coldCallStatus"])
+    : [];
+
   const [showForm, setShowForm] = useState(false);
-  const [showCsvImport, setShowCsvImport] = useState(false);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
@@ -55,7 +71,7 @@ export function ProspectPage() {
     { key: 'company', label: 'Company', visible: true },
     { key: 'phone', label: 'Phone', visible: true },
     { key: 'status', label: 'Status', visible: true },
-    { key: 'source', label: 'Source', visible: true },
+    { key: 'type', label: 'Type', visible: true },
   ]);
 
   const isVisible = (key: string) => columns.find(c => c.key === key)?.visible ?? true;
@@ -234,20 +250,20 @@ export function ProspectPage() {
               {isVisible('company') && <th className="px-3 text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-secondary)]">Company</th>}
               {isVisible('phone') && <th className="px-3 text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-secondary)]">Phone</th>}
               {isVisible('status') && <th className="px-3 text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-secondary)]">Status</th>}
-              {isVisible('source') && <th className="px-3 text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-secondary)]">Source</th>}
+              {isVisible('type') && <th className="px-3 text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-secondary)]">Type</th>}
               <th className="w-16 px-3 text-right text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-secondary)]">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--ods-border)]">
             {isLoading ? (
               <tr>
-                <td colSpan={7} className="text-center py-8 text-[13px] text-[var(--ods-text-secondary)]">
-                  Loading...
+                <td colSpan={7} className="text-center py-8">
+                  <Spokes className="h-8 w-8 text-[var(--ods-brand-600)] mx-auto" />
                 </td>
               </tr>
             ) : prospects?.length === 0 ? (
               <tr>
-                <td colSpan={7} className="text-center py-8 text-[13px] text-[var(--ods-text-secondary)]">
+                <td colSpan={8} className="text-center py-8 text-[13px] text-[var(--ods-text-secondary)]">
                   No prospects yet. Click "Sync" to import from Twenty.
                 </td>
               </tr>
@@ -276,22 +292,27 @@ export function ProspectPage() {
                   <td className="px-3">
                     <StatusSelect
                       value={prospect.status}
+                      options={statusOptions}
                       onChange={(newStatus) => handleStatusChange(prospect.id, newStatus)}
                     />
                   </td>
                 )}
-                {isVisible('source') && (
+                {isVisible('type') && (
                   <td className="px-3 text-[13px] text-[var(--ods-text-secondary)]">
                     <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] text-[11px] font-medium bg-[var(--ods-bg-secondary)] border border-[var(--ods-border)] text-[var(--ods-text-primary)]">
-                      {prospect.source || "Twenty"}
+                      {prospect.source || "—"}
                     </span>
                   </td>
                 )}
                 <td className="w-16 px-3 text-right">
                   <div className="flex items-center justify-end gap-1">
-                    <a href={`tel:${prospect.phone}`} className="p-1 text-[var(--ods-text-secondary)] hover:text-[var(--ods-brand-600)]" title="Call">
+                    <button
+                      onClick={() => navigate(`/prospects/${prospect.id}`)}
+                      className="p-1 text-[var(--ods-text-secondary)] hover:text-[var(--ods-brand-600)]"
+                      title="Call"
+                    >
                       <Phone className="w-3.5 h-3.5" />
-                    </a>
+                    </button>
                     {prospect.email && (
                       <a href={`mailto:${prospect.email}`} className="p-1 text-[var(--ods-text-secondary)] hover:text-[var(--ods-brand-600)]" title="Email">
                         <Mail className="w-3.5 h-3.5" />
@@ -319,20 +340,6 @@ export function ProspectPage() {
             queryClient.invalidateQueries({ queryKey: ["prospects"] });
             setShowForm(false);
             success("Prospect created", `${data.first_name} ${data.last_name} has been added`);
-          }}
-        />
-      )}
-
-      {showCsvImport && (
-        <CsvImport
-          onClose={() => setShowCsvImport(false)}
-          onImport={async (rows) => {
-            for (const row of rows) {
-              await api.prospects.create(row as any);
-            }
-            queryClient.invalidateQueries({ queryKey: ["prospects"] });
-            setShowCsvImport(false);
-            success("Import complete", `${rows.length} prospect(s) imported`);
           }}
         />
       )}

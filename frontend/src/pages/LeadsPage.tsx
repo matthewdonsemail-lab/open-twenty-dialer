@@ -3,14 +3,16 @@ import { useNavigate } from "react-router-dom";
 import { useLeads } from "@/hooks/useLeads";
 import { useCreateLead, useDeleteLead, useUpdateLead } from "@/hooks/useLeads";
 import { StatusSelect } from "@/components/common/StatusSelect";
+import { mapLeadProspectStatusOptions } from "@/lib/twentyOptions";
 import { RecordIndexCommandMenu } from "@/components/common/RecordIndexCommandMenu";
 import { ColumnVisibilityDropdown, ColumnDef } from "@/components/common/ColumnVisibilityDropdown";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { LeadForm } from "@/components/leads/LeadForm";
-import { CsvImport } from "@/components/leads/CsvImport";
 import { useToast } from "@/components/ui/Toast";
 import { Mail, Phone } from "lucide-react";
 import { ActionsMenu } from "@/components/common/ActionsMenu";
+import { api } from "@/lib/apiClient";
+import { useQuery } from "@tanstack/react-query";
 
 type StatusFilter = string | "all";
 
@@ -22,8 +24,18 @@ export function LeadsPage() {
   const deleteLead = useDeleteLead();
   const { success, error: toastError } = useToast();
 
+  // Fetch status options from Twenty CRM
+  const { data: meta } = useQuery<{ fields: Record<string, Array<{ label: string; value: string; color: string }>> }>({
+    queryKey: ["twenty-meta", "agencyLeads"],
+    queryFn: async () => api.twentyMeta.fields("agencyLeads"),
+    staleTime: Infinity,
+  });
+
+  const statusOptions = meta?.fields["coldCallStatus"]
+    ? mapLeadProspectStatusOptions(meta.fields["coldCallStatus"])
+    : [];
+
   const [showForm, setShowForm] = useState(false);
-  const [showCsvImport, setShowCsvImport] = useState(false);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
@@ -36,6 +48,7 @@ export function LeadsPage() {
     { key: 'phone', label: 'Phone', visible: true },
     { key: 'status', label: 'Status', visible: true },
     { key: 'last_called', label: 'Last Called', visible: true },
+    { key: 'type', label: 'Type', visible: true },
   ]);
 
   const isVisible = (key: string) => columns.find(c => c.key === key)?.visible ?? true;
@@ -201,6 +214,7 @@ export function LeadsPage() {
                   <td className="px-3">
                     <StatusSelect
                       value={lead.status}
+                      options={statusOptions}
                       onChange={(newStatus) => handleStatusChange(lead.id, newStatus)}
                     />
                   </td>
@@ -210,11 +224,22 @@ export function LeadsPage() {
                     {lead.last_called_at ? new Date(lead.last_called_at).toLocaleDateString() : "—"}
                   </td>
                 )}
+                {isVisible('type') && (
+                  <td className="px-3 text-[13px] text-[var(--ods-text-secondary)]">
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] text-[11px] font-medium bg-[var(--ods-bg-secondary)] border border-[var(--ods-border)] text-[var(--ods-text-primary)]">
+                      {lead.source || "—"}
+                    </span>
+                  </td>
+                )}
                 <td className="w-16 px-3 text-right">
                   <div className="flex items-center justify-end gap-1">
-                    <a href={`tel:${lead.phone}`} className="p-1 text-[var(--ods-text-secondary)] hover:text-[var(--ods-brand-600)]" title="Call">
+                    <button
+                      onClick={() => navigate(`/leads/${lead.id}`)}
+                      className="p-1 text-[var(--ods-text-secondary)] hover:text-[var(--ods-brand-600)]"
+                      title="Call"
+                    >
                       <Phone className="w-3.5 h-3.5" />
-                    </a>
+                    </button>
                     {lead.email && (
                       <a href={`mailto:${lead.email}`} className="p-1 text-[var(--ods-text-secondary)] hover:text-[var(--ods-brand-600)]" title="Email">
                         <Mail className="w-3.5 h-3.5" />
@@ -241,19 +266,6 @@ export function LeadsPage() {
             await createLead.mutateAsync(data as any);
             setShowForm(false);
             success("Lead created", `${data.first_name} ${data.last_name} has been added`);
-          }}
-        />
-      )}
-
-      {showCsvImport && (
-        <CsvImport
-          onClose={() => setShowCsvImport(false)}
-          onImport={async (rows) => {
-            for (const row of rows) {
-              await createLead.mutateAsync(row as any);
-            }
-            setShowCsvImport(false);
-            success("Import complete", `${rows.length} lead(s) imported`);
           }}
         />
       )}

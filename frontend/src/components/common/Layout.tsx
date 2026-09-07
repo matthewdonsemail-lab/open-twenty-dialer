@@ -148,7 +148,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <div className="flex items-center justify-between h-8 px-2 rounded-[6px] hover:bg-black/[0.04] transition-colors">
             <div className="flex items-center gap-2 min-w-0">
               <div className="w-5 h-5 rounded-full bg-black/10 flex items-center justify-center text-[10px] font-medium text-[var(--ods-text-primary,#18181b)] flex-shrink-0">
-                {(user?.user_metadata?.full_name ?? user?.email ?? 'U')[0].toUpperCase()}
+                {((user?.user_metadata?.full_name || user?.email || 'U') as string).trim()[0]?.toUpperCase() ?? 'U'}
               </div>
               <span className="text-[12px] font-medium text-[var(--ods-text-secondary,#575757)] truncate">
                 {user?.user_metadata?.full_name ?? user?.email?.split('@')[0] ?? 'User'}

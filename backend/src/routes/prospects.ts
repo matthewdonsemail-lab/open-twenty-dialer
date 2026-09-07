@@ -1,247 +1,325 @@
 import { Router } from "express";
-import { v4 as uuid } from "uuid";
-import db from "../db/database.js";
 import { authMiddleware, AuthRequest } from "../middleware/auth.js";
-import { loadSyncConfig } from "../sync/config.js";
-import { 
-  createAgencyProspect, 
-  updateAgencyProspect, 
-  deleteAgencyProspect,
-  mapOcdProspectToTwenty,
-  AgencyProspect
-} from "../sync/prospects.js";
+import { listTwenty, createTwenty, updateTwenty, deleteTwenty, getTwenty } from "../lib/twenty-client.js";
+import { createLogger } from "../lib/logger.js";
 
 const router = Router();
 router.use(authMiddleware);
 
-let syncEnabled = false;
-try {
-  if (process.env.TWENTY_BASE_URL && process.env.TWENTY_API_KEY) {
-    loadSyncConfig();
-    syncEnabled = true;
-  }
-} catch {}
+const log = createLogger('prospects');
 
-router.get("/", (req, res) => {
-  const rows = db.prepare("SELECT * FROM prospects ORDER BY created_at DESC").all();
-  res.json(rows.map(mapProspect));
+// Status mappings
+const STATUS_MAP: Record<string, string> = {
+  "NEW": "new",
+  "CONTACTED": "contacted",
+  "INTERESTED": "interested",
+  "NOT_INTERESTED": "not_interested",
+  "CALLBACK": "callback",
+  "CONVERTED": "converted",
+  "DO_NOT_CONTACT": "do_not_contact",
+};
+
+interface AgencyProspect {
+  id: string;
+  name?: string;
+  slug?: string;
+  phone?: string;
+  fullAddress?: string;
+  city?: string;
+  region?: string;
+  country?: string;
+  niche?: string;
+  website?: string;
+  rating?: number;
+  reviewCount?: number;
+  email?: string;
+  externalId?: string;
+  outboundState?: string;
+  outboundLabel?: string;
+  coldCallStatus?: string;
+  utmSource?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+interface AgencyCampaign {
+  id: string;
+  utmSource?: string;
+}
+
+router.get("/", async (_req, res) => {
+  try {
+    log.info('Listing prospects from Twenty CRM');
+    const prospects = await listTwenty<AgencyProspect>('agencyProspects', 100);
+
+    // Fetch campaigns to resolve campaign types
+    let campaignMap: Record<string, string> = {};
+    try {
+      const campaigns = await listTwenty<AgencyCampaign>('agencyCampaigns', 100);
+      campaignMap = Object.fromEntries(campaigns.map(c => [c.id, c.utmSource || 'outbound']));
+    } catch {
+      // Campaign lookup is best-effort; proceed without it
+    }
+
+    const mapped = prospects.map(prospect => {
+      // Parse name into first_name / last_name
+      const fullName = prospect.name || "";
+      const nameParts = fullName.split(" ");
+      const firstName = nameParts[0] || undefined;
+      const lastName = nameParts.slice(1).join(" ") || undefined;
+
+      // Parse address
+      const addressParts = (prospect.fullAddress || "").split(",").map(p => p.trim());
+      const address = addressParts[0] || "";
+      const city = prospect.city || addressParts[1] || "";
+      const state = prospect.region || addressParts[2] || "";
+      const zip = addressParts[3] || "";
+
+      // Map Twenty status to our frontend status
+      const status = prospect.coldCallStatus
+        ? STATUS_MAP[prospect.coldCallStatus] || "new"
+        : "new";
+
+      return {
+        id: prospect.id,
+        first_name: firstName,
+        last_name: lastName,
+        company: prospect.niche || "—" ,
+        phone: prospect.phone,
+        email: prospect.email,
+        website: prospect.website,
+        address,
+        city,
+        state,
+        zip,
+        status,
+        source: prospect.niche || "twenty-import",
+        campaign_id: undefined,
+        campaign_type: prospect.utmSource ? (prospect.utmSource === 'outbound' ? 'outbound' : prospect.utmSource === 'inbound' ? 'inbound' : 'blended') : undefined,
+        assigned_to: undefined,
+        tags: prospect.outboundState ? [prospect.outboundState] : null,
+        notes: prospect.outboundLabel || undefined,
+        dnc: status === "not_interested" || status === "do_not_contact",
+        last_contacted_at: null,
+        contact_count: 0,
+        sync_id: prospect.externalId,
+        created_at: prospect.createdAt || new Date().toISOString(),
+        updated_at: prospect.updatedAt || new Date().toISOString(),
+      };
+    });
+
+    log.info(`Returning ${mapped.length} prospects`);
+    res.json(mapped);
+  } catch (err: any) {
+    log.error("Failed to list prospects:", err.message);
+    res.status(500).json({ error: "Failed to fetch prospects from Twenty", details: err.message });
+  }
 });
 
-router.get("/:id", (req, res) => {
-  const row = db.prepare("SELECT * FROM prospects WHERE id = ?").get(req.params.id) as any;
-  if (!row) {
+router.get("/:id", async (req, res) => {
+  try {
+    log.info(`Getting prospect ${req.params.id}`);
+    const id = req.params.id as string;
+    const prospect = await getTwenty<AgencyProspect>('agencyProspects', id);
+    log.info(`Raw prospect from Twenty: ${JSON.stringify(prospect)}`);
+
+    const addressParts = (prospect.fullAddress || "").split(",").map(p => p.trim());
+    const fullName = prospect.name || "";
+    const nameParts = fullName.split(" ");
+    const firstName = nameParts[0] || undefined;
+    const lastName = nameParts.slice(1).join(" ") || undefined;
+    const status = prospect.coldCallStatus
+      ? STATUS_MAP[prospect.coldCallStatus] || "new"
+      : "new";
+
+    const mapped = {
+      id: prospect.id,
+      first_name: firstName,
+      last_name: lastName,
+      company: prospect.niche || "—",
+      phone: prospect.phone,
+      email: prospect.email,
+      website: prospect.website,
+      address: addressParts[0],
+      city: prospect.city || addressParts[1],
+      state: prospect.region || addressParts[2],
+      zip: addressParts[3],
+      status,
+      source: prospect.niche || "twenty-import",
+      campaign_type: prospect.utmSource ? (prospect.utmSource === 'outbound' ? 'outbound' : prospect.utmSource === 'inbound' ? 'inbound' : 'blended') : undefined,
+      tags: prospect.outboundState ? [prospect.outboundState] : null,
+      notes: prospect.outboundLabel,
+      dnc: status === "not_interested" || status === "do_not_contact",
+      sync_id: prospect.externalId,
+      created_at: prospect.createdAt || new Date().toISOString(),
+      updated_at: prospect.updatedAt || new Date().toISOString(),
+    };
+
+    res.json(mapped);
+  } catch (err: any) {
+    log.error(`Failed to get prospect ${req.params.id}:`, err.message);
     res.status(404).json({ error: "Prospect not found" });
-    return;
   }
-  res.json(mapProspect(row));
 });
 
 router.post("/", async (req: AuthRequest, res) => {
-  const id = uuid();
-  const syncId = uuid();
-  const now = new Date().toISOString();
-  const {
-    first_name, last_name, company, phone, email, website,
-    address, city, state, zip, status, source, campaign_id,
-    assigned_to, tags, notes, dnc,
-  } = req.body;
+  try {
+    const {
+      first_name, last_name, phone, email, website,
+      address, city, state, zip, status, source, tags, notes, dnc,
+    } = req.body;
 
-  db.prepare(
-    `INSERT INTO prospects (id, first_name, last_name, company, phone, email, website, address, city, state, zip, status, source, campaign_id, assigned_to, tags, notes, dnc, sync_id, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(
-    id, first_name || null, last_name || null, company || null,
-    phone || null, email || null, website || null, address || null,
-    city || null, state || null, zip || null, status || "new",
-    source || null, campaign_id || null, assigned_to || null,
-    tags ? JSON.stringify(tags) : null, notes || null,
-    dnc ? 1 : 0, syncId, now, now
-  );
+    const fullName = [first_name, last_name].filter(Boolean).join(" ").trim();
+    const fullAddress = [address, city, state, zip].filter(Boolean).join(", ");
 
-  const row = db.prepare("SELECT * FROM prospects WHERE id = ?").get(id) as any;
-  const mapped = mapProspect(row);
+    // Map our status to Twenty's coldCallStatus
+    const coldCallStatus = dnc ? "DO_NOT_CONTACT" : (
+      status === "contacted" ? "CONTACTED" :
+      status === "interested" ? "INTERESTED" :
+      status === "callback" ? "CALLBACK" :
+      status === "converted" ? "CONVERTED" :
+      status === "not_interested" ? "NOT_INTERESTED" : "NEW"
+    );
 
-  if (syncEnabled) {
-    try {
-      const config = loadSyncConfig();
-      const twentyProspect = mapOcdProspectToTwenty(mapped);
-      console.log("[sync] Syncing new prospect to Twenty:", JSON.stringify(twentyProspect, null, 2));
-      await createAgencyProspect(config, { ...twentyProspect, sync_id: syncId });
-    } catch (err) {
-      console.error("[sync] failed to sync prospect create:", err);
-    }
+    log.info(`Creating prospect: ${fullName}`);
+
+    const payload = {
+      name: fullName,
+      phone: phone,
+      email: email,
+      website: website,
+      fullAddress: fullAddress || undefined,
+      city: city,
+      region: state,
+      country: "US",
+      niche: source || "general",
+      rating: 0,
+      reviewCount: 0,
+      externalId: undefined,
+      outboundState: tags?.[0],
+      coldCallStatus,
+    };
+
+    const result = await createTwenty<any>('agencyProspects', payload);
+    const prospect = result.data || result;
+
+    const mapped = {
+      id: prospect.id,
+      first_name,
+      last_name,
+      phone,
+      email,
+      website,
+      address,
+      city,
+      state,
+      zip,
+      status: coldCallStatus === "DO_NOT_CONTACT" ? "do_not_contact" : "new",
+      source,
+      tags: tags || null,
+      notes: notes,
+      dnc: Boolean(dnc),
+      sync_id: prospect.externalId,
+      created_at: prospect.createdAt || new Date().toISOString(),
+      updated_at: prospect.updatedAt || new Date().toISOString(),
+    };
+
+    log.info(`Created prospect ${prospect.id}`);
+    res.status(201).json(mapped);
+  } catch (err: any) {
+    log.error("Failed to create prospect:", err.message);
+    res.status(500).json({ error: "Failed to create prospect in Twenty", details: err.message });
   }
-
-  res.status(201).json(mapped);
 });
 
-router.patch("/:id", async (req, res) => {
-  const existing = db.prepare("SELECT * FROM prospects WHERE id = ?").get(req.params.id) as any;
-  if (!existing) {
-    res.status(404).json({ error: "Prospect not found" });
-    return;
-  }
+router.patch("/:id", async (req: AuthRequest, res) => {
+  try {
+    log.info(`Updating prospect ${req.params.id}`);
 
-  const fields = [
-    "first_name", "last_name", "company", "phone", "email", "website",
-    "address", "city", "state", "zip", "status", "source", "campaign_id",
-    "assigned_to", "tags", "notes", "dnc", "last_contacted_at", "contact_count",
-  ];
+    const {
+      first_name, last_name, phone, email, website,
+      address, city, state, zip, status, source, tags, notes, dnc,
+    } = req.body;
 
-  const updates: string[] = [];
-  const values: any[] = [];
+    const payload: any = {};
 
-  for (const field of fields) {
-    if (req.body[field] !== undefined) {
-      updates.push(`${field} = ?`);
-      values.push(field === "tags" ? JSON.stringify(req.body[field]) : req.body[field]);
+    if (first_name !== undefined || last_name !== undefined) {
+      const fullName = [first_name, last_name].filter(Boolean).join(" ").trim();
+      if (fullName) payload.name = fullName;
     }
-  }
 
-  if (updates.length === 0) {
-    res.status(400).json({ error: "No fields to update" });
-    return;
-  }
-
-  updates.push("updated_at = ?");
-  values.push(new Date().toISOString());
-  values.push(req.params.id);
-
-  db.prepare(`UPDATE prospects SET ${updates.join(", ")} WHERE id = ?`).run(...values);
-  const row = db.prepare("SELECT * FROM prospects WHERE id = ?").get(req.params.id) as any;
-  const mapped = mapProspect(row);
-
-  if (syncEnabled && existing.sync_id) {
-    try {
-      const config = loadSyncConfig();
-      const twentyUpdates = mapOcdProspectToTwenty(mapped);
-      console.log("[sync] Syncing prospect update to Twenty:", JSON.stringify({
-        sync_id: existing.sync_id,
-        updates: twentyUpdates,
-      }, null, 2));
-      await updateAgencyProspect(config, existing.sync_id, twentyUpdates);
-    } catch (err) {
-      console.error("[sync] failed to sync prospect update:", err);
+    if (phone !== undefined) payload.phone = phone;
+    if (email !== undefined) payload.email = email;
+    if (website !== undefined) payload.website = website;
+    if (address !== undefined || city !== undefined || state !== undefined || zip !== undefined) {
+      const fullAddress = [address, city, state, zip].filter(Boolean).join(", ");
+      if (fullAddress) payload.fullAddress = fullAddress;
     }
-  }
+    if (city !== undefined) payload.city = city;
+    if (state !== undefined) payload.region = state;
+    if (source !== undefined) payload.niche = source;
+    if (notes !== undefined) payload.outboundLabel = notes;
+    if (tags?.[0] !== undefined) payload.outboundState = tags[0];
 
-  res.json(mapped);
+    // Map status
+    if (status !== undefined) {
+      payload.coldCallStatus = dnc ? "DO_NOT_CONTACT" : (
+        status === "contacted" ? "CONTACTED" :
+        status === "interested" ? "INTERESTED" :
+        status === "callback" ? "CALLBACK" :
+        status === "converted" ? "CONVERTED" :
+        status === "not_interested" ? "NOT_INTERESTED" : "NEW"
+      );
+    }
+
+    if (Object.keys(payload).length === 0) {
+      res.status(400).json({ error: "No fields to update" });
+      return;
+    }
+
+    const id = req.params.id as string;
+    const result = await updateTwenty<any>('agencyProspects', id, payload);
+    const prospect = result.data || result;
+
+    const mappedStatus = prospect.coldCallStatus
+      ? STATUS_MAP[prospect.coldCallStatus] || "new"
+      : "new";
+
+    const fullName = prospect.name || "";
+    const nameParts = fullName.split(" ");
+
+    const mapped = {
+      id: prospect.id,
+      first_name: nameParts[0] || undefined,
+      last_name: nameParts.slice(1).join(" ") || undefined,
+      phone: prospect.phone,
+      email: prospect.email,
+      status: mappedStatus,
+      created_at: prospect.createdAt || new Date().toISOString(),
+      updated_at: prospect.updatedAt || new Date().toISOString(),
+    };
+
+    log.info(`Updated prospect ${prospect.id}`);
+    res.json(mapped);
+  } catch (err: any) {
+    log.error(`Failed to update prospect ${req.params.id}:`, err.message);
+    res.status(500).json({ error: "Failed to update prospect in Twenty", details: err.message });
+  }
 });
 
 router.delete("/:id", async (req, res) => {
-  const existing = db.prepare("SELECT * FROM prospects WHERE id = ?").get(req.params.id) as any;
-  if (!existing) {
-    res.status(404).json({ error: "Prospect not found" });
-    return;
-  }
+  try {
+    log.info(`Deleting prospect ${req.params.id}`);
+    const id = req.params.id as string;
 
-  const result = db.prepare("DELETE FROM prospects WHERE id = ?").run(req.params.id);
-  if (result.changes === 0) {
-    res.status(404).json({ error: "Prospect not found" });
-    return;
-  }
+    await deleteTwenty('agencyProspects', id);
 
-  if (syncEnabled && existing.sync_id) {
-    try {
-      const config = loadSyncConfig();
-      console.log("[sync] Deleting prospect from Twenty with sync_id:", existing.sync_id);
-      await deleteAgencyProspect(config, existing.sync_id);
-    } catch (err) {
-      console.error("[sync] failed to sync prospect delete:", err);
-    }
-  }
-
-  res.status(204).end();
-});
-
-router.post("/import", async (req: AuthRequest, res) => {
-  const { rows } = req.body;
-  if (!Array.isArray(rows) || rows.length === 0) {
-    res.status(400).json({ error: "No rows to import" });
-    return;
-  }
-
-  const insert = db.prepare(
-    `INSERT INTO prospects (id, first_name, last_name, company, phone, email, website, address, city, state, zip, status, source, sync_id, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`
-  );
-
-  let count = 0;
-  const importedSyncIds: string[] = [];
-
-  const insertMany = db.transaction((items: any[]) => {
-    let c = 0;
-    for (const row of items) {
-      try {
-        const id = uuid();
-        const syncId = uuid();
-        insert.run(
-          id,
-          row.first_name || null,
-          row.last_name || null,
-          row.company || null,
-          row.phone || null,
-          row.email || null,
-          row.website || null,
-          row.address || null,
-          row.city || null,
-          row.state || null,
-          row.zip || null,
-          row.status || "new",
-          row.source || "import",
-          syncId,
-        );
-        importedSyncIds.push(syncId);
-        c++;
-      } catch {}
-    }
-    return c;
-  });
-
-  const imported = insertMany(rows);
-  res.json({ imported, total: rows.length });
-
-  if (syncEnabled && imported > 0) {
-    try {
-      const config = loadSyncConfig();
-      const importedProspects = db.prepare("SELECT * FROM prospects WHERE sync_id IN (???)").all(importedSyncIds) as any[];
-      for (const prospect of importedProspects) {
-        const mapped = mapProspect(prospect);
-        const twentyProspect = mapOcdProspectToTwenty(mapped);
-        await createAgencyProspect(config, { ...twentyProspect, sync_id: mapped.sync_id });
-      }
-    } catch (err) {
-      console.error("[sync] failed to sync imported prospects:", err);
-    }
+    log.info(`Deleted prospect ${id}`);
+    res.status(204).end();
+  } catch (err: any) {
+    log.error(`Failed to delete prospect ${req.params.id}:`, err.message);
+    res.status(500).json({ error: "Failed to delete prospect from Twenty", details: err.message });
   }
 });
-
-function mapProspect(row: any) {
-  return {
-    id: row.id,
-    first_name: row.first_name,
-    last_name: row.last_name,
-    company: row.company,
-    phone: row.phone,
-    email: row.email,
-    website: row.website,
-    address: row.address,
-    city: row.city,
-    state: row.state,
-    zip: row.zip,
-    status: row.status,
-    source: row.source,
-    campaign_id: row.campaign_id,
-    assigned_to: row.assigned_to,
-    tags: row.tags ? JSON.parse(row.tags) : null,
-    notes: row.notes,
-    dnc: Boolean(row.dnc),
-    last_contacted_at: row.last_contacted_at,
-    contact_count: row.contact_count,
-    sync_id: row.sync_id,
-    created_at: row.created_at,
-    updated_at: row.updated_at,
-  };
-}
 
 export default router;

@@ -9,6 +9,8 @@ import {
   Clock,
   RotateCcw,
   Check,
+  Radio,
+  RadioOff,
 } from "lucide-react";
 import { getSipConfig, isSipConfigured, getSipDomain, getSipExtension } from "@/sip";
 import { Button } from "@/components/ui/Button";
@@ -24,6 +26,7 @@ interface SoftphoneProps {
     duration: number;
     notes: string;
     direction: "outbound" | "inbound";
+    recordingUrl?: string;
   }) => void;
 }
 
@@ -46,11 +49,24 @@ export function Softphone({ lead, onCallEnd }: SoftphoneProps) {
     callerName: string;
     session: any;
   } | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingError, setRecordingError] = useState<string | null>(null);
+  const [microphoneError, setMicrophoneError] = useState<string | null>(null);
+
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const sessionRef = useRef<any>(null);
   const inboundSessionRef = useRef<any>(null);
   const wasEstablishedRef = useRef(false);
   const callStateRef = useRef<CallState>("idle");
+
+  // Audio refs
+  const remoteAudioRef = useRef<HTMLAudioElement>(null);
+  const localAudioRef = useRef<HTMLAudioElement>(null);
+
+  // Media refs
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
 
   const phoneNumber = lead?.phone ?? dialNumber;
 
@@ -58,6 +74,20 @@ export function Softphone({ lead, onCallEnd }: SoftphoneProps) {
     callStateRef.current = callState;
   }, [callState]);
 
+  // Cleanup media streams and recording on unmount
+  useEffect(() => {
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      stopRecording();
+      stopLocalStream();
+      if (inboundSessionRef.current) {
+        try { inboundSessionRef.current.terminate(); } catch {}
+        inboundSessionRef.current = null;
+      }
+    };
+  }, []);
+
+  // Duration timer
   useEffect(() => {
     if (callState === "active" || callState === "ringing" || callState === "connecting") {
       intervalRef.current = setInterval(() => {
@@ -68,10 +98,6 @@ export function Softphone({ lead, onCallEnd }: SoftphoneProps) {
     }
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
-      if (inboundSessionRef.current) {
-        try { inboundSessionRef.current.terminate(); } catch {}
-        inboundSessionRef.current = null;
-      }
     };
   }, [callState]);
 
@@ -81,6 +107,121 @@ export function Softphone({ lead, onCallEnd }: SoftphoneProps) {
     return `${m.toString().padStart(2, "0")}:${sec.toString().padStart(2, "0")}`;
   };
 
+  // Get local microphone stream
+  const getLocalStream = useCallback(async (): Promise<MediaStream> => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      localStreamRef.current = stream;
+      setMicrophoneError(null);
+      return stream;
+    } catch (err) {
+      console.error("Failed to get local microphone:", err);
+      setMicrophoneError("Microphone access denied. Please allow microphone permissions.");
+      throw err;
+    }
+  }, []);
+
+  const stopLocalStream = useCallback(() => {
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach(track => track.stop());
+      localStreamRef.current = null;
+    }
+  }, []);
+
+  // Recording functions
+  const startRecording = useCallback(() => {
+    if (!localStreamRef.current) return;
+
+    try {
+      recordedChunksRef.current = [];
+
+      // Try to get both local and remote audio for recording
+      const recordingStream = new MediaStream();
+
+      // Add local mic track
+      localStreamRef.current.getAudioTracks().forEach(track => {
+        recordingStream.addTrack(track);
+      });
+
+      // Add remote audio track if available
+      if (remoteAudioRef.current?.srcObject) {
+        const remoteStream = remoteAudioRef.current.srcObject as MediaStream;
+        remoteStream.getAudioTracks().forEach(track => {
+          recordingStream.addTrack(track);
+        });
+      }
+
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : MediaRecorder.isTypeSupported("audio/webm")
+          ? "audio/webm"
+          : "audio/ogg";
+
+      const recorder = new MediaRecorder(recordingStream, { mimeType });
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          recordedChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onstop = async () => {
+        const blob = new Blob(recordedChunksRef.current, { type: mimeType });
+        console.log(`Recording completed: ${blob.size} bytes`);
+
+        // Upload recording
+        await uploadRecording(blob);
+      };
+
+      recorder.start(1000); // Collect 1s chunks
+      mediaRecorderRef.current = recorder;
+      setIsRecording(true);
+      console.log("Recording started");
+    } catch (err) {
+      console.error("Failed to start recording:", err);
+      setRecordingError("Failed to start recording");
+    }
+  }, []);
+
+  const stopRecording = useCallback(async () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stop();
+      mediaRecorderRef.current = null;
+      setIsRecording(false);
+    }
+  }, []);
+
+  const uploadRecording = useCallback(async (blob: Blob) => {
+    if (!blob || blob.size === 0) {
+      console.warn("No recording data to upload");
+      return null;
+    }
+
+    try {
+      const formData = new FormData();
+      formData.append("recording", blob, `call-recording-${Date.now()}.webm`);
+      formData.append("callId", ""); // Will be populated from call log
+      formData.append("leadId", lead?.id || "");
+
+      const response = await fetch("/api/calls/recording", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error(`Upload failed: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log("Recording uploaded:", data);
+      return data.recordingUrl;
+    } catch (err) {
+      console.error("Failed to upload recording:", err);
+      setRecordingError("Failed to upload recording");
+      return null;
+    }
+  }, [lead?.id]);
+
   const startSimulatedCall = useCallback(() => {
     setCallState("connecting");
     setTimeout(() => setCallState("ringing"), 1500);
@@ -89,11 +230,14 @@ export function Softphone({ lead, onCallEnd }: SoftphoneProps) {
 
   const startCall = useCallback(async () => {
     if (!phoneNumber) return;
+
     setCallState("connecting");
     setDuration(0);
     setNotes("");
     setOutcome("no_answer");
     wasEstablishedRef.current = false;
+    setMicrophoneError(null);
+    setRecordingError(null);
 
     const sipConfig = getSipConfig();
 
@@ -105,6 +249,9 @@ export function Softphone({ lead, onCallEnd }: SoftphoneProps) {
 
     try {
       const { UserAgent, Registerer, Inviter, SessionState } = await import("sip.js");
+
+      // Get local mic stream first
+      const localStream = await getLocalStream();
 
       const domain = getSipDomain();
       const target = UserAgent.makeURI(`sip:${phoneNumber}@${domain}`);
@@ -156,22 +303,64 @@ export function Softphone({ lead, onCallEnd }: SoftphoneProps) {
       const inviter = new Inviter(userAgent, target, {
         sessionDescriptionHandlerOptions: {
           constraints: { audio: true, video: false },
+          /**
+           * Attach local media stream to the peer connection
+           */
+          middleware: {
+            createAnswer: (next: any) => {
+              return async (desc: any, options: any) => {
+                const answer = await next(desc, options);
+                if (localStreamRef.current) {
+                  localStreamRef.current.getAudioTracks().forEach(track => {
+                    answer.peerConnection.addTrack(track, localStreamRef.current!);
+                  });
+                }
+                return answer;
+              };
+            },
+            createOffer: (next: any) => {
+              return async (desc: any, options: any) => {
+                const offer = await next(desc, options);
+                if (localStreamRef.current) {
+                  localStreamRef.current.getAudioTracks().forEach(track => {
+                    offer.peerConnection.addTrack(track, localStreamRef.current!);
+                  });
+                }
+                return offer;
+              };
+            },
+          },
         },
         extraHeaders,
       });
 
       sessionRef.current = inviter;
 
+      /**
+       * Handle incoming tracks from remote party
+       */
+      inviter.sessionDescriptionHandler?.peerConnection.addEventListener("track", (event: any) => {
+        console.log("Remote track received:", event.track.id);
+        if (event.track.kind === "audio" && remoteAudioRef.current) {
+          remoteAudioRef.current.srcObject = event.streams[0];
+          remoteAudioRef.current.play().catch(console.error);
+        }
+      });
+
       inviter.stateChange.addListener((state: string) => {
         if (state === SessionState.Established) {
           wasEstablishedRef.current = true;
           setCallState("active");
           setOutcome("answered");
+          console.log("Call established - starting recording");
+          // Start recording once call is established
+          setTimeout(() => startRecording(), 500);
         } else if (state === SessionState.Terminated) {
           if (!wasEstablishedRef.current && callStateRef.current === "ringing") {
             setOutcome("no_answer");
           }
           setCallState("ended");
+          console.log("Call terminated");
         } else if (state === SessionState.Establishing) {
           setCallState("ringing");
         }
@@ -183,9 +372,13 @@ export function Softphone({ lead, onCallEnd }: SoftphoneProps) {
       console.warn("SIP.js call failed, using simulated call:", err);
       startSimulatedCall();
     }
-  }, [phoneNumber, startSimulatedCall]);
+  }, [phoneNumber, startSimulatedCall, getLocalStream]);
 
-  const endCall = useCallback(() => {
+  const endCall = useCallback(async () => {
+    // Stop recording if active
+    await stopRecording();
+    stopLocalStream();
+
     if (sessionRef.current) {
       try {
         sessionRef.current.bye();
@@ -198,51 +391,104 @@ export function Softphone({ lead, onCallEnd }: SoftphoneProps) {
       try { inboundSessionRef.current.terminate(); } catch {}
       inboundSessionRef.current = null;
     }
+
+    // Clear audio elements
+    if (remoteAudioRef.current) {
+      remoteAudioRef.current.srcObject = null;
+    }
+    if (localAudioRef.current) {
+      localAudioRef.current.srcObject = null;
+    }
+
     setIncomingCall(null);
     setCallState("ended");
     if (intervalRef.current) clearInterval(intervalRef.current);
-  }, []);
+  }, [stopRecording, stopLocalStream]);
 
   const toggleMute = useCallback(() => {
     if (callState === "active") {
-      setCallState("muted");
-    } else if (callState === "muted") {
-      setCallState("active");
+      const isCurrentlyMuted = callState === "muted";
+      setCallState(isCurrentlyMuted ? "active" : "muted");
+
+      // Toggle actual microphone
+      if (localStreamRef.current) {
+        localStreamRef.current.getAudioTracks().forEach(track => {
+          track.enabled = !isCurrentlyMuted;
+        });
+      }
     }
   }, [callState]);
 
-  const toggleHold = useCallback(() => {
-    if (callState === "active") {
-      setHoldActive(true);
-      setCallState("on_hold");
-    } else if (callState === "on_hold") {
-      setHoldActive(false);
-      setCallState("active");
+  const toggleHold = useCallback(async () => {
+    if (callState === "active" || callState === "on_hold") {
+      const session = sessionRef.current;
+      if (!session) return;
+
+      const isGoingOnHold = callState !== "on_hold";
+      setHoldActive(isGoingOnHold);
+      setCallState(isGoingOnHold ? "on_hold" : "active");
+
+      if (isGoingOnHold) {
+        // Put call on hold via SIP re-invite
+        try {
+          await session.pause();
+          console.log("Call put on hold");
+        } catch (err) {
+          console.error("Failed to put call on hold:", err);
+          setCallState("active");
+          setHoldActive(false);
+        }
+      } else {
+        // Resume call
+        try {
+          await session.resume();
+          console.log("Call resumed");
+        } catch (err) {
+          console.error("Failed to resume call:", err);
+        }
+      }
     }
   }, [callState]);
 
-  const handleSaveOutcome = useCallback(() => {
+  const handleSaveOutcome = useCallback(async () => {
+    // Recording is already uploaded via onstop callback
+    // Just signal the call is done with its metadata
     if (onCallEnd) {
       onCallEnd({ outcome, duration, notes, direction });
     }
+
+    // Reset state
     setCallState("idle");
     setDuration(0);
     setNotes("");
     setOutcome("no_answer");
     setDirection("outbound");
+    setIsRecording(false);
   }, [onCallEnd, outcome, duration, notes, direction]);
 
   const handleAcceptIncomingCall = useCallback(async () => {
     const session = inboundSessionRef.current;
     if (!session) return;
+
     try {
+      // Get local mic stream
+      const localStream = await getLocalStream();
+
+      // Attach local tracks to the session
+      const pc = session.sessionDescriptionHandler?.peerConnection;
+      if (pc) {
+        localStream.getAudioTracks().forEach(track => {
+          pc.addTrack(track, localStream);
+        });
+      }
+
       await session.accept();
       setCallState("active");
       setIncomingCall(null);
     } catch (err) {
       console.warn("Failed to accept incoming call:", err);
     }
-  }, []);
+  }, [getLocalStream]);
 
   const handleRejectIncomingCall = useCallback(() => {
     const session = inboundSessionRef.current;
@@ -278,9 +524,6 @@ export function Softphone({ lead, onCallEnd }: SoftphoneProps) {
     ended: "Call Ended",
   };
 
-  // Single semantic token per state — no gradients, no per-state background
-  // repaint. Twenty communicates call state with a small dot + label, the
-  // same pattern as StatusBadge, not by recoloring the whole panel.
   const stateColor: Record<CallState, string> = {
     idle: "var(--ods-text-tertiary)",
     connecting: "var(--ods-brand-600)",
@@ -307,8 +550,12 @@ export function Softphone({ lead, onCallEnd }: SoftphoneProps) {
 
   return (
     <>
+      {/* Hidden audio elements for playback */}
+      <audio ref={remoteAudioRef} hidden />
+      <audio ref={localAudioRef} hidden />
+
       <div className="bg-[var(--ods-bg-secondary)] border border-[var(--ods-border)] rounded-ods-md overflow-hidden">
-        {/* 40px header, flat — matches PageCanvas/WidgetCard, no state-based repaint */}
+        {/* 40px header, flat */}
         <div className="h-10 min-h-[40px] px-4 border-b border-[var(--ods-border)] flex items-center gap-3">
           <div className="w-6 h-6 rounded-full bg-[var(--ods-bg-tertiary)] flex items-center justify-center shrink-0">
             <Phone className="w-3.5 h-3.5 text-[var(--ods-text-secondary)]" />
@@ -323,6 +570,12 @@ export function Softphone({ lead, onCallEnd }: SoftphoneProps) {
               <span className="flex items-center gap-1 text-[11px] text-[var(--ods-text-tertiary)]">
                 <Clock className="w-3 h-3" />
                 {formatDuration(duration)}
+              </span>
+            )}
+            {isRecording && (
+              <span className="flex items-center gap-1 text-[11px] text-red-500">
+                <Radio className="w-3 h-3 animate-pulse" />
+                REC
               </span>
             )}
             <span
@@ -340,6 +593,20 @@ export function Softphone({ lead, onCallEnd }: SoftphoneProps) {
           <p className="text-[12px] text-[var(--ods-text-tertiary)] truncate -mt-1">
             {lead.company ?? lead.email ?? "No contact info"}
           </p>
+
+          {/* Microphone error */}
+          {microphoneError && (
+            <div className="bg-red-500/10 border border-red-500/20 rounded-ods-sm p-2 text-[11px] text-red-600">
+              {microphoneError}
+            </div>
+          )}
+
+          {/* Recording error */}
+          {recordingError && (
+            <div className="bg-red-500/10 border border-red-500/20 rounded-ods-sm p-2 text-[11px] text-red-600">
+              {recordingError}
+            </div>
+          )}
 
           <div className="text-center">
             <p className="text-[18px] font-semibold text-[var(--ods-text-primary)]">{phoneNumber || "—"}</p>
@@ -373,6 +640,7 @@ export function Softphone({ lead, onCallEnd }: SoftphoneProps) {
                       ? "bg-red-500/10 text-red-600"
                       : "bg-[var(--ods-bg-tertiary)] text-[var(--ods-text-secondary)] hover:bg-[var(--ods-border)]"
                   }`}
+                  title={callState === "muted" ? "Unmute" : "Mute"}
                 >
                   {callState === "muted" ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
                 </button>
@@ -383,6 +651,7 @@ export function Softphone({ lead, onCallEnd }: SoftphoneProps) {
                       ? "bg-amber-500/10 text-amber-600"
                       : "bg-[var(--ods-bg-tertiary)] text-[var(--ods-text-secondary)] hover:bg-[var(--ods-border)]"
                   }`}
+                  title="Hold"
                 >
                   <Headphones className="w-5 h-5" />
                 </button>
@@ -398,6 +667,7 @@ export function Softphone({ lead, onCallEnd }: SoftphoneProps) {
                   ? "bg-[var(--ods-brand-100)] text-[var(--ods-brand-700)]"
                   : "bg-[var(--ods-bg-tertiary)] text-[var(--ods-text-secondary)] hover:bg-[var(--ods-border)]"
               }`}
+              title="Keypad"
             >
               <Keyboard className="w-4 h-4" />
             </button>

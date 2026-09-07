@@ -1,4 +1,5 @@
 import React from "react";
+import { Badge } from "./Badge";
 
 interface WidgetCardProps {
   title?: string;
@@ -6,6 +7,7 @@ interface WidgetCardProps {
   action?: React.ReactNode;
   children: React.ReactNode;
   className?: string;
+  subtitle?: React.ReactNode;
 }
 
 export function WidgetCard({
@@ -14,6 +16,7 @@ export function WidgetCard({
   action,
   children,
   className = "",
+  subtitle,
 }: WidgetCardProps) {
   return (
     <div
@@ -21,13 +24,14 @@ export function WidgetCard({
     >
       {title && (
         <div className="h-8 min-h-[32px] px-3 border-b border-[var(--ods-border)] flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            {Icon && <Icon className="w-3.5 h-3.5 text-[var(--ods-text-tertiary)]" />}
-            <span className="text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-tertiary)]">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            {Icon && <Icon className="w-3.5 h-3.5 text-[var(--ods-text-tertiary)] flex-shrink-0" />}
+            <span className="text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-tertiary)] truncate">
               {title}
             </span>
+            {subtitle && <span className="flex-shrink-0">{subtitle}</span>}
           </div>
-          {action && <div>{action}</div>}
+          {action && <div className="flex-shrink-0 ml-2">{action}</div>}
         </div>
       )}
       <div className="p-3 md:p-4 flex-1">{children}</div>

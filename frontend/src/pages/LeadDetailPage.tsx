@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { useLead } from "@/hooks/useLeads";
 import { useCallLog } from "@/hooks/useCallLogs";
 import { useCreateCallLog } from "@/hooks/useCallLogs";
@@ -8,20 +9,39 @@ import { Softphone } from "@/components/softphone/Softphone";
 import { CallScriptViewer } from "@/components/scripts/CallScriptViewer";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { StatusSelect } from "@/components/common/StatusSelect";
+import { mapLeadProspectStatusOptions } from "@/lib/twentyOptions";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { PageCanvas } from "@/components/common/PageCanvas";
 import { WidgetCard } from "@/components/ui/WidgetCard";
 import { Button } from "@/components/ui/Button";
+import { Badge } from "@/components/ui/Badge";
 import { useToast } from "@/components/ui/Toast";
 import { ArrowLeft, Edit3, Trash2, Phone, Mail, Globe, MapPin, FileText } from "lucide-react";
 import { Spokes } from "@/components/ui/Spinner";
+import { api } from "@/lib/apiClient";
 
 export function LeadDetailPage() {
   const { leadId } = useParams<{ leadId: string }>();
   const navigate = useNavigate();
   const { success, error: toastError } = useToast();
   const { data: lead, isLoading } = useLead(leadId ?? "");
+
+  React.useEffect(() => {
+    if (lead) console.log("LeadDetailPage data:", JSON.stringify(lead, null, 2));
+  }, [lead]);
   const { data: callLogs } = useCallLog(leadId ?? "");
+
+  // Fetch status options from Twenty CRM
+  const { data: meta } = useQuery<{ fields: Record<string, Array<{ label: string; value: string; color: string }>> }>({
+    queryKey: ["twenty-meta", "agencyLeads"],
+    queryFn: async () => api.twentyMeta.fields("agencyLeads"),
+    staleTime: Infinity,
+  });
+
+  const statusOptions = meta?.fields["coldCallStatus"]
+    ? mapLeadProspectStatusOptions(meta.fields["coldCallStatus"])
+    : [];
+
   const createCallLog = useCreateCallLog();
   const updateLeadMutation = useUpdateLead();
   const deleteLeadMutation = useDeleteLead();
@@ -187,13 +207,23 @@ export function LeadDetailPage() {
                 </dt>
                 <StatusSelect
                   value={lead.status}
+                  options={statusOptions}
                   onChange={handleStatusChange}
                 />
               </div>
 
+              {/* Industry Badge */}
+              {lead.source && (
+                <div>
+                  <dt className="text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-tertiary)] mb-2">
+                    Industry
+                  </dt>
+                  <Badge variant="indigo">{lead.source}</Badge>
+                </div>
+              )}
+
               <dl className="flex flex-col gap-[var(--ods-sp-3)]">
                 {[
-                  ["Source", lead.source ?? "—"],
                   ["Company", lead.company ?? "—"],
                   ["Phone", lead.phone ?? "—"],
                   ["Email", lead.email ?? "—"],

@@ -1,20 +1,12 @@
 import { Router } from "express";
 import { authMiddleware, AuthRequest } from "../middleware/auth.js";
-import { loadSyncConfig } from "../sync/config.js";
+import { listTwenty } from "../lib/twenty-client.js";
+import { createLogger } from "../lib/logger.js";
 
 const router = Router();
 router.use(authMiddleware);
 
-let syncEnabled = false;
-let syncConfig = null;
-try {
-  if (process.env.TWENTY_BASE_URL && process.env.TWENTY_API_KEY) {
-    syncConfig = loadSyncConfig();
-    syncEnabled = true;
-  }
-} catch {
-  // Twenty sync not configured
-}
+const log = createLogger('phones');
 
 interface AgencyPhone {
   id: string;
@@ -30,27 +22,14 @@ interface AgencyPhone {
 }
 
 router.get("/", async (_req, res) => {
-  if (!syncEnabled || !syncConfig) {
-    res.status(503).json({ error: "Twenty sync not configured" });
-    return;
-  }
-
   try {
-    const res = await fetch(`${syncConfig.twentyBaseUrl}/agencyPhones`, {
-      headers: {
-        Authorization: `Bearer ${syncConfig.twentyApiKey}`,
-        "Content-Type": "application/json",
-      },
-    });
+    log.info('Fetching phones from Twenty CRM');
 
-    if (!res.ok) {
-      throw new Error(`Failed to fetch agencyPhones: ${res.status}`);
-    }
+    const phones = await listTwenty<AgencyPhone>('agencyPhones', 100);
 
-    const json = await res.json();
-    const phones = (json?.data ?? json) as AgencyPhone[];
+    log.info(`Found ${phones.length} phones`);
 
-    const mapped = phones.map((phone: AgencyPhone) => ({
+    const mapped = phones.map((phone) => ({
       id: phone.id,
       phoneNumber: phone.phoneNumber || phone.name || "—",
       provider: phone.provider || "Unknown",
@@ -64,8 +43,8 @@ router.get("/", async (_req, res) => {
 
     res.json(mapped);
   } catch (err: any) {
-    console.error("[sync] failed to fetch phones from Twenty:", err);
-    res.status(500).json({ error: "Failed to fetch phone numbers from Twenty" });
+    log.error("Failed to fetch phones from Twenty:", err.message);
+    res.status(500).json({ error: "Failed to fetch phone numbers from Twenty", details: err.message });
   }
 });
 

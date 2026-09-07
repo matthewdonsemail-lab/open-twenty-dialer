@@ -7,11 +7,15 @@ export interface AuthRequest extends Request {
   userId?: string;
   twentyUserId?: string;
   userRole?: string;
+  userEmail?: string;
+  userFullName?: string;
 }
 
 export interface TokenPayload {
   userId: string;
   twentyUserId?: string;
+  email?: string;
+  fullName?: string;
 }
 
 export function generateToken(payload: TokenPayload): string {
@@ -30,6 +34,8 @@ export function authMiddleware(req: AuthRequest, res: Response, next: NextFuncti
     const payload = jwt.verify(token, JWT_SECRET) as TokenPayload;
     req.userId = payload.userId;
     req.twentyUserId = payload.twentyUserId;
+    req.userEmail = payload.email;
+    req.userFullName = payload.fullName;
     next();
   } catch {
     res.status(401).json({ error: "Invalid or expired token" });

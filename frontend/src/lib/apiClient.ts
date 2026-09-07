@@ -97,28 +97,6 @@ export const api = {
       request<void>(`/api/campaigns/${id}`, { method: "DELETE" }),
   },
 
-  twentyCampaigns: {
-    list: () => request<any[]>("/api/twenty/campaigns"),
-  },
-
-  twentyPhones: {
-    list: () => request<any[]>("/api/twenty/phones"),
-  },
-
-  profiles: {
-    list: () => request<any[]>("/api/profiles"),
-  },
-
-  callLogs: {
-    list: () => request<any[]>("/api/call-logs"),
-    getByLead: (leadId: string) => request<any[]>(`/api/call-logs/lead/${leadId}`),
-    get: (id: string) => request<any>(`/api/call-logs/${id}`),
-    create: (data: any) =>
-      request<any>("/api/call-logs", { method: "POST", body: JSON.stringify(data) }),
-    delete: (id: string) =>
-      request<void>(`/api/call-logs/${id}`, { method: "DELETE" }),
-  },
-
   scripts: {
     list: () => request<any[]>("/api/scripts"),
     get: (id: string) => request<any>(`/api/scripts/${id}`),
@@ -128,5 +106,16 @@ export const api = {
       request<any>(`/api/scripts/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
     delete: (id: string) =>
       request<void>(`/api/scripts/${id}`, { method: "DELETE" }),
+  },
+
+  twentyPhones: {
+    list: () => request<any[]>("/api/twenty/phones"),
+  },
+
+  twentyMeta: {
+    fields: (objectName: string) =>
+      request<{ fields: Record<string, Array<{ label: string; value: string; color: string }>> }>(
+        `/api/twenty/meta/${objectName}`
+      ),
   },
 };

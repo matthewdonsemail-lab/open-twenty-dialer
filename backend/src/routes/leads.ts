@@ -1,237 +1,334 @@
 import { Router } from "express";
-import { v4 as uuid } from "uuid";
-import db from "../db/database.js";
 import { authMiddleware, AuthRequest } from "../middleware/auth.js";
-import { loadSyncConfig } from "../sync/config.js";
-import { mapOcdLeadToAgencyLead, createAgencyLead, updateAgencyLead, deleteAgencyLead } from "../sync/leads.js";
+import { listTwenty, createTwenty, updateTwenty, deleteTwenty, getTwenty } from "../lib/twenty-client.js";
+import { createLogger } from "../lib/logger.js";
 
 const router = Router();
 router.use(authMiddleware);
 
-let syncEnabled = false;
-try {
-  if (process.env.TWENTY_BASE_URL && process.env.TWENTY_API_KEY) {
-    loadSyncConfig();
-    syncEnabled = true;
-  }
-} catch {}
+const log = createLogger('leads');
 
-router.get("/", (req, res) => {
-  const rows = db.prepare("SELECT * FROM leads ORDER BY created_at DESC").all();
-  res.json(rows.map(mapLead));
+// Status mappings between Twenty and our frontend
+const STATUS_MAP: Record<string, string> = {
+  "NEW": "new",
+  "CONTACTED": "contacted",
+  "QUALIFIED": "interested",
+  "BOOKED": "callback",
+  "CONVERTED": "converted",
+  "LOST": "not_interested",
+};
+
+interface AgencyCampaign {
+  id: string;
+  utmSource?: string;
+}
+
+interface AgencyLead {
+  id: string;
+  name?: string;
+  contactName?: string;
+  email?: string;
+  phone?: {
+    primaryPhoneNumber?: string;
+    primaryPhoneCountryCode?: string;
+    primaryPhoneCallingCode?: string;
+    additionalPhones?: any[];
+  };
+  company?: string;
+  status?: string;
+  coldCallStatus?: string;
+  source?: string;
+  note?: string;
+  outboundMessage?: string;
+  createdById?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+router.get("/", async (_req, res) => {
+  try {
+    log.info('Listing leads from Twenty CRM');
+    const leads = await listTwenty<AgencyLead>('agencyLeads', 200);
+
+    // Fetch campaigns to resolve campaign types
+    let campaignMap: Record<string, string> = {};
+    try {
+      const campaigns = await listTwenty<AgencyCampaign>('agencyCampaigns', 100);
+      campaignMap = Object.fromEntries(campaigns.map(c => [c.id, c.utmSource || 'outbound']));
+    } catch {
+      // Campaign lookup is best-effort; proceed without it
+    }
+
+    const mapped = leads.map(lead => {
+      const fullName = lead.name || lead.contactName || "";
+      const parts = fullName.split(" ");
+
+      // Map Twenty status to our frontend status
+      const status = lead.coldCallStatus
+        ? STATUS_MAP[lead.coldCallStatus] || "new"
+        : (lead.status ? STATUS_MAP[lead.status] || "new" : "new");
+
+      // Resolve campaign type from createdById (campaign ID stored in Twenty)
+      const campaignType = lead.createdById ? (campaignMap[lead.createdById] || undefined) : undefined;
+
+      return {
+        id: lead.id,
+        first_name: parts[0] || undefined,
+        last_name: parts.slice(1).join(" ") || undefined,
+        company: lead.company,
+        phone: lead.phone?.primaryPhoneNumber,
+        email: lead.email,
+        website: undefined,
+        address: undefined,
+        city: undefined,
+        state: undefined,
+        zip: undefined,
+        status,
+        source: lead.source,
+        campaign_id: undefined,
+        campaign_type: campaignType,
+        assigned_to: lead.createdById,
+        tags: null,
+        notes: lead.note,
+        dnc: status === "not_interested" || status === "converted",
+        last_called_at: null,
+        call_count: 0,
+        sync_id: lead.outboundMessage,
+        created_at: lead.createdAt || new Date().toISOString(),
+        updated_at: lead.updatedAt || new Date().toISOString(),
+      };
+    });
+
+    log.info(`Returning ${mapped.length} leads`);
+    res.json(mapped);
+  } catch (err: any) {
+    log.error("Failed to list leads:", err.message);
+    res.status(500).json({ error: "Failed to fetch leads from Twenty", details: err.message });
+  }
 });
 
-router.get("/:id", (req, res) => {
-  const row = db.prepare("SELECT * FROM leads WHERE id = ?").get(req.params.id) as any;
-  if (!row) {
+router.get("/:id", async (req, res) => {
+  try {
+    log.info(`Getting lead ${req.params.id}`);
+    const id = req.params.id as string;
+    const lead = await getTwenty<AgencyLead>('agencyLeads', id);
+
+    // Fetch campaigns to resolve campaign types
+    let campaignMap: Record<string, string> = {};
+    try {
+      const campaigns = await listTwenty<AgencyCampaign>('agencyCampaigns', 100);
+      campaignMap = Object.fromEntries(campaigns.map(c => [c.id, c.utmSource || 'outbound']));
+    } catch {
+      // Campaign lookup is best-effort; proceed without it
+    }
+
+    const fullName = lead.name || lead.contactName || "";
+    const parts = fullName.split(" ");
+    const status = lead.coldCallStatus 
+      ? STATUS_MAP[lead.coldCallStatus] || "new"
+      : (lead.status ? STATUS_MAP[lead.status] || "new" : "new");
+
+    const mapped = {
+      id: lead.id,
+      first_name: parts[0] || undefined,
+      last_name: parts.slice(1).join(" ") || undefined,
+      company: lead.company,
+      phone: lead.phone?.primaryPhoneNumber,
+      email: lead.email,
+      website: undefined,
+      address: undefined,
+      city: undefined,
+      state: undefined,
+      zip: undefined,
+      status,
+      source: lead.source,
+      campaign_id: undefined,
+      campaign_type: lead.createdById ? (campaignMap[lead.createdById] || undefined) : undefined,
+      assigned_to: lead.createdById,
+      tags: null,
+      notes: lead.note,
+      dnc: status === "not_interested" || status === "converted",
+      last_called_at: null,
+      call_count: 0,
+      sync_id: lead.outboundMessage,
+      created_at: lead.createdAt || new Date().toISOString(),
+      updated_at: lead.updatedAt || new Date().toISOString(),
+    };
+
+    res.json(mapped);
+  } catch (err: any) {
+    log.error(`Failed to get lead ${req.params.id}:`, err.message);
     res.status(404).json({ error: "Lead not found" });
-    return;
   }
-  res.json(mapLead(row));
 });
 
 router.post("/", async (req: AuthRequest, res) => {
-  const id = uuid();
-  const syncId = uuid();
-  const now = new Date().toISOString();
-  const {
-    first_name, last_name, company, phone, email, website,
-    address, city, state, zip, status, source, campaign_id,
-    assigned_to, tags, notes, dnc,
-  } = req.body;
+  try {
+    const {
+      first_name, last_name, company, phone, email, website,
+      address, city, state, zip, status, source, campaign_id,
+      assigned_to, tags, notes, dnc,
+    } = req.body;
 
-  // Default ownership to the logged-in member's Twenty user id.
-  const ownerId = assigned_to || req.twentyUserId || req.userId;
+    const fullName = [first_name, last_name].filter(Boolean).join(" ").trim();
+    
+    // Map our status to Twenty's coldCallStatus
+    const coldCallStatus = dnc ? "DO_NOT_CONTACT" : (
+      status === "contacted" ? "CONTACTED" :
+      status === "interested" ? "INTERESTED" :
+      status === "callback" ? "CALLBACK" :
+      status === "converted" ? "CONVERTED" :
+      status === "not_interested" ? "NOT_INTERESTED" : "NEW"
+    );
 
-  db.prepare(
-    `INSERT INTO leads (id, first_name, last_name, company, phone, email, website, address, city, state, zip, status, source, campaign_id, assigned_to, tags, notes, dnc, sync_id, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(
-    id, first_name || null, last_name || null, company || null,
-    phone || null, email || null, website || null, address || null,
-    city || null, state || null, zip || null, status || "new",
-    source || null, campaign_id || null, ownerId,
-    tags ? JSON.stringify(tags) : null, notes || null,
-    dnc ? 1 : 0, syncId, now, now
-  );
+    log.info(`Creating lead: ${fullName}`);
+    
+    const payload = {
+      contactName: fullName,
+      email: email,
+      phone: phone ? {
+        primaryPhoneNumber: phone.replace(/\D/g, ""),
+        primaryPhoneCountryCode: "",
+        primaryPhoneCallingCode: "",
+        additionalPhones: [],
+      } : undefined,
+      company: company,
+      status: coldCallStatus === "DO_NOT_CONTACT" ? "LOST" : "NEW",
+      coldCallStatus,
+      source: source,
+      note: notes,
+      outboundMessage: undefined,
+      createdById: req.twentyUserId,
+    };
 
-  const row = db.prepare("SELECT * FROM leads WHERE id = ?").get(id) as any;
-  const mapped = mapLead(row);
+    const result = await createTwenty<any>('agencyLeads', payload);
+    const lead = result.data || result;
+    
+    const mapped = {
+      id: lead.id,
+      first_name,
+      last_name,
+      company,
+      phone,
+      email,
+      website,
+      address,
+      city,
+      state,
+      zip,
+      status: coldCallStatus === "DO_NOT_CONTACT" ? "not_interested" : "new",
+      source,
+      campaign_id: campaign_id,
+      assigned_to: req.twentyUserId,
+      tags: tags ? JSON.stringify(tags) : null,
+      notes,
+      dnc: Boolean(dnc),
+      last_called_at: null,
+      call_count: 0,
+      sync_id: lead.outboundMessage || undefined,
+      created_at: lead.createdAt || new Date().toISOString(),
+      updated_at: lead.updatedAt || new Date().toISOString(),
+    };
 
-  if (syncEnabled) {
-    try {
-      const config = loadSyncConfig();
-      await createAgencyLead(config, {
-        ...mapOcdLeadToAgencyLead({ ...mapped, createdById: req.twentyUserId }),
-        sync_id: syncId,
-      });
-    } catch (err) {
-      console.error("[sync] failed to sync lead create:", err);
-    }
+    log.info(`Created lead ${lead.id}`);
+    res.status(201).json(mapped);
+  } catch (err: any) {
+    log.error("Failed to create lead:", err.message);
+    res.status(500).json({ error: "Failed to create lead in Twenty", details: err.message });
   }
-
-  res.status(201).json(mapped);
 });
 
 router.patch("/:id", async (req: AuthRequest, res) => {
-  const existing = db.prepare("SELECT * FROM leads WHERE id = ?").get(req.params.id) as any;
-  if (!existing) {
-    res.status(404).json({ error: "Lead not found" });
-    return;
-  }
+  try {
+    log.info(`Updating lead ${req.params.id}`);
+    
+    const {
+      first_name, last_name, company, phone, email, website,
+      address, city, state, zip, status, source, campaign_id,
+      assigned_to, tags, notes, dnc,
+    } = req.body;
 
-  const fields = [
-    "first_name", "last_name", "company", "phone", "email", "website",
-    "address", "city", "state", "zip", "status", "source", "campaign_id",
-    "assigned_to", "tags", "notes", "dnc", "last_called_at", "call_count",
-  ];
-
-  const updates: string[] = [];
-  const values: any[] = [];
-
-  for (const field of fields) {
-    if (req.body[field] !== undefined) {
-      updates.push(`${field} = ?`);
-      values.push(field === "tags" ? JSON.stringify(req.body[field]) : req.body[field]);
+    const payload: any = {};
+    
+    if (first_name !== undefined || last_name !== undefined) {
+      const fullName = [first_name, last_name].filter(Boolean).join(" ").trim();
+      if (fullName) payload.contactName = fullName;
     }
-  }
-
-  if (updates.length === 0) {
-    res.status(400).json({ error: "No fields to update" });
-    return;
-  }
-
-  updates.push("updated_at = ?");
-  values.push(new Date().toISOString());
-  values.push(req.params.id);
-
-  db.prepare(`UPDATE leads SET ${updates.join(", ")} WHERE id = ?`).run(...values);
-  const row = db.prepare("SELECT * FROM leads WHERE id = ?").get(req.params.id) as any;
-  const mapped = mapLead(row);
-
-  if (syncEnabled && existing.sync_id) {
-    try {
-      const config = loadSyncConfig();
-      await updateAgencyLead(config, existing.sync_id, mapOcdLeadToAgencyLead({ ...mapped, createdById: req.twentyUserId }));
-    } catch (err) {
-      console.error("[sync] failed to sync lead update:", err);
+    
+    if (company !== undefined) payload.company = company;
+    if (phone !== undefined) {
+      payload.phone = phone ? {
+        primaryPhoneNumber: phone.replace(/\D/g, ""),
+        primaryPhoneCountryCode: "",
+        primaryPhoneCallingCode: "",
+        additionalPhones: [],
+      } : undefined;
     }
-  }
-
-  res.json(mapped);
-});
-
-router.delete("/:id", async (req: AuthRequest, res) => {
-  const existing = db.prepare("SELECT * FROM leads WHERE id = ?").get(req.params.id) as any;
-  if (!existing) {
-    res.status(404).json({ error: "Lead not found" });
-    return;
-  }
-
-  const result = db.prepare("DELETE FROM leads WHERE id = ?").run(req.params.id);
-  if (result.changes === 0) {
-    res.status(404).json({ error: "Lead not found" });
-    return;
-  }
-
-  if (syncEnabled && existing.sync_id) {
-    try {
-      const config = loadSyncConfig();
-      await deleteAgencyLead(config, existing.sync_id);
-    } catch (err) {
-      console.error("[sync] failed to sync lead delete:", err);
+    if (email !== undefined) payload.email = email;
+    if (notes !== undefined) payload.note = notes;
+    if (source !== undefined) payload.source = source;
+    
+    // Map status
+    if (status !== undefined) {
+      payload.coldCallStatus = dnc ? "DO_NOT_CONTACT" : (
+        status === "contacted" ? "CONTACTED" :
+        status === "interested" ? "INTERESTED" :
+        status === "callback" ? "CALLBACK" :
+        status === "converted" ? "CONVERTED" :
+        status === "not_interested" ? "NOT_INTERESTED" : "NEW"
+      );
     }
-  }
 
-  res.status(204).end();
-});
-
-router.post("/import", async (req: AuthRequest, res) => {
-  const { rows } = req.body;
-  if (!Array.isArray(rows) || rows.length === 0) {
-    res.status(400).json({ error: "No rows to import" });
-    return;
-  }
-
-  const insert = db.prepare(
-    `INSERT INTO leads (id, first_name, last_name, company, phone, email, website, address, city, state, zip, status, source, sync_id, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`
-  );
-
-  let count = 0;
-  const importedSyncIds: string[] = [];
-
-  const insertMany = db.transaction((items: any[]) => {
-    let c = 0;
-    for (const row of items) {
-      try {
-        const id = uuid();
-        const syncId = uuid();
-        insert.run(
-          id,
-          row.first_name || null,
-          row.last_name || null,
-          row.company || null,
-          row.phone || null,
-          row.email || null,
-          row.website || null,
-          row.address || null,
-          row.city || null,
-          row.state || null,
-          row.zip || null,
-          row.status || "new",
-          row.source || "import",
-          syncId,
-        );
-        importedSyncIds.push(syncId);
-        c++;
-      } catch {}
+    if (Object.keys(payload).length === 0) {
+      res.status(400).json({ error: "No fields to update" });
+      return;
     }
-    return c;
-  });
 
-  const imported = insertMany(rows);
-  res.json({ imported, total: rows.length });
+    const id = req.params.id as string;
+    const result = await updateTwenty<any>('agencyLeads', id, payload);
+    const lead = result.data || result;
+    
+    // Return mapped response
+    const fullName = lead.name || lead.contactName || "";
+    const parts = fullName.split(" ");
+    const mappedStatus = lead.coldCallStatus 
+      ? STATUS_MAP[lead.coldCallStatus] || "new"
+      : (lead.status ? STATUS_MAP[lead.status] || "new" : "new");
 
-  if (syncEnabled && imported > 0) {
-    try {
-      const config = loadSyncConfig();
-      const importedLeads = db.prepare("SELECT * FROM leads WHERE sync_id IN (???)").all(importedSyncIds) as any[];
-      for (const lead of importedLeads) {
-        await createAgencyLead(config, { ...mapOcdLeadToAgencyLead({ ...mapLead(lead), createdById: req.twentyUserId }), sync_id: lead.sync_id });
-      }
-    } catch (err) {
-      console.error("[sync] failed to sync imported leads:", err);
-    }
+    const mapped = {
+      id: lead.id,
+      first_name: parts[0] || undefined,
+      last_name: parts.slice(1).join(" ") || undefined,
+      company: lead.company,
+      phone: lead.phone?.primaryPhoneNumber,
+      email: lead.email,
+      status: mappedStatus,
+      notes: lead.note,
+      created_at: lead.createdAt || new Date().toISOString(),
+      updated_at: lead.updatedAt || new Date().toISOString(),
+    };
+
+    log.info(`Updated lead ${lead.id}`);
+    res.json(mapped);
+  } catch (err: any) {
+    log.error(`Failed to update lead ${req.params.id}:`, err.message);
+    res.status(500).json({ error: "Failed to update lead in Twenty", details: err.message });
   }
 });
 
-function mapLead(row: any) {
-  return {
-    id: row.id,
-    first_name: row.first_name,
-    last_name: row.last_name,
-    company: row.company,
-    phone: row.phone,
-    email: row.email,
-    website: row.website,
-    address: row.address,
-    city: row.city,
-    state: row.state,
-    zip: row.zip,
-    status: row.status,
-    source: row.source,
-    campaign_id: row.campaign_id,
-    assigned_to: row.assigned_to,
-    tags: row.tags ? JSON.parse(row.tags) : null,
-    notes: row.notes,
-    dnc: Boolean(row.dnc),
-    last_called_at: row.last_called_at,
-    call_count: row.call_count,
-    sync_id: row.sync_id,
-    created_at: row.created_at,
-    updated_at: row.updated_at,
-  };
-}
+router.delete("/:id", async (req, res) => {
+  try {
+    log.info(`Deleting lead ${req.params.id}`);
+    const id = req.params.id as string;
+    
+    await deleteTwenty('agencyLeads', id);
+    
+    log.info(`Deleted lead ${id}`);
+    res.status(204).end();
+  } catch (err: any) {
+    log.error(`Failed to delete lead ${req.params.id}:`, err.message);
+    res.status(500).json({ error: "Failed to delete lead from Twenty", details: err.message });
+  }
+});
 
 export default router;

@@ -1,0 +1,3 @@
+﻿{
+  "query": "query { objects(filter: { namePlural: { equalTo: \"agencyCampaigns\" } }) { edges { node { id nameSingular namePlural isCustom isActive fields(paging: { first: 200 }) { edges { node { id name type isCustom isNullable } } } } } } }"
+}

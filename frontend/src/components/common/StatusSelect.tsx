@@ -17,25 +17,16 @@ export interface StatusOption {
   textColor: string;
 }
 
-export const STATUS_CONFIG: Record<string, StatusOption> = {
-  new: { value: "new", label: "New", dotColor: "bg-blue-500", bgTint: "bg-blue-500/10", textColor: "text-blue-700" },
-  contacted: { value: "contacted", label: "Contacted", dotColor: "bg-indigo-500", bgTint: "bg-indigo-500/10", textColor: "text-indigo-700" },
-  interested: { value: "interested", label: "Interested", dotColor: "bg-amber-500", bgTint: "bg-amber-500/10", textColor: "text-amber-700" },
-  not_interested: { value: "not_interested", label: "Not Interested", dotColor: "bg-gray-400", bgTint: "bg-gray-400/10", textColor: "text-gray-600" },
-  callback: { value: "callback", label: "Callback", dotColor: "bg-purple-500", bgTint: "bg-purple-500/10", textColor: "text-purple-700" },
-  converted: { value: "converted", label: "Converted", dotColor: "bg-emerald-500", bgTint: "bg-emerald-500/10", textColor: "text-emerald-700" },
-  do_not_contact: { value: "do_not_contact", label: "DNC", dotColor: "bg-rose-500", bgTint: "bg-rose-500/10", textColor: "text-rose-700" },
-};
-
 interface StatusSelectProps {
   value?: string;
   onChange: (newValue: string) => void;
   disabled?: boolean;
+  options: StatusOption[];
 }
 
-export function StatusSelect({ value = "new", onChange, disabled }: StatusSelectProps) {
+export function StatusSelect({ value, onChange, disabled, options }: StatusSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const current = STATUS_CONFIG[value] || STATUS_CONFIG.new;
+  const current = options.find((o) => o.value === value) || options[0];
   const pendingRef = useRef<string | null>(null);
 
   const { refs, floatingStyles } = useFloating({
@@ -51,13 +42,14 @@ export function StatusSelect({ value = "new", onChange, disabled }: StatusSelect
     setIsOpen(false);
   };
 
-  // Fire onChange when menu closes
   useEffect(() => {
     if (!isOpen && pendingRef.current) {
       onChange(pendingRef.current);
       pendingRef.current = null;
     }
   }, [isOpen, onChange]);
+
+  if (!current || options.length === 0) return null;
 
   return (
     <>
@@ -81,7 +73,7 @@ export function StatusSelect({ value = "new", onChange, disabled }: StatusSelect
             style={floatingStyles}
             className="z-[60] w-40 py-1 bg-[var(--ods-bg-primary)] border border-[var(--ods-border)] rounded-[6px] shadow-lg flex flex-col gap-0.5 select-none"
           >
-            {Object.values(STATUS_CONFIG).map((option) => (
+            {options.map((option) => (
               <div
                 key={option.value}
                 onClick={() => handleOptionClick(option.value)}

@@ -1,0 +1,1 @@
+{"query":"query { objects(paging: { first: 100 }) { edges { node { id nameSingular namePlural isSystem isActive fields(paging: { first: 200 }) { edges { node { id name type isSystem isNullable } } } } } } }"}
