@@ -2,7 +2,6 @@ import React, { useState } from "react";
 import { BookOpen, AlertTriangle, Search, Plus } from "lucide-react";
 import { PageCanvas } from "@/components/common/PageCanvas";
 import { WidgetCard } from "@/components/ui/WidgetCard";
-import { Button } from "@/components/ui/Button";
 import { useScripts, Script } from "@/hooks/useScripts";
 import { useCreateScript, useDeleteScript } from "@/hooks/useScripts";
 
@@ -60,10 +59,14 @@ export function ScriptsPage() {
               className="pl-7 pr-3 py-1.5 text-[12px] border border-[var(--ods-border)] rounded-[4px] bg-[var(--ods-bg-primary)] text-[var(--ods-text-primary)] placeholder:text-[var(--ods-text-tertiary)] outline-none focus:border-[var(--ods-brand-500)]"
             />
           </div>
-          <Button size="sm" onClick={handleCreateScript} disabled={createScript.isPending}>
+          <button
+            onClick={handleCreateScript}
+            disabled={createScript.isPending}
+            className="h-7 px-2.5 rounded-[6px] text-[12px] font-medium bg-[var(--ods-brand-600)] text-white hover:opacity-90 transition-opacity flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
             <Plus className="w-3.5 h-3.5" />
             New Script
-          </Button>
+          </button>
         </div>
       }
     >
@@ -118,14 +121,13 @@ export function ScriptsPage() {
             <WidgetCard
               title={selectedScript.name}
               action={
-                <Button
-                  variant="ghost"
-                  size="sm"
+                <button
                   onClick={() => handleDeleteScript(selectedScript.id)}
                   disabled={deleteScript.isPending}
+                  className="h-7 px-2.5 rounded-[6px] text-[12px] font-medium text-[var(--ods-text-secondary)] hover:text-red-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Delete
-                </Button>
+                </button>
               }
               className="mb-6"
             >
