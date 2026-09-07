@@ -82,7 +82,7 @@ router.post("/", async (req: AuthRequest, res) => {
     };
 
     if (campaignId) {
-      payload.campaignId = campaignId;
+      payload.campaignId = { id: campaignId };
     }
 
     const result = await createTwenty<any>('agencyScripts', payload);
@@ -114,12 +114,12 @@ router.patch("/:id", async (req: AuthRequest, res) => {
 
     const payload: any = {};
     if (name !== undefined) payload.name = name;
-    // RELATION fields require connect/disconnect operations in Twenty REST API
+    // RELATION fields: pass the target object directly for Twenty REST API
     if (campaignId !== undefined) {
       if (campaignId) {
-        payload.campaignId = { connect: [campaignId] };
+        payload.campaignId = { id: campaignId };
       } else {
-        payload.campaignId = { disconnect: true };
+        payload.campaignId = null;
       }
     }
     if (scriptData !== undefined) payload.scriptData = JSON.stringify(scriptData);
