@@ -114,7 +114,14 @@ router.patch("/:id", async (req: AuthRequest, res) => {
 
     const payload: any = {};
     if (name !== undefined) payload.name = name;
-    if (campaignId !== undefined) payload.campaignId = campaignId || null;
+    // RELATION fields require connect/disconnect operations in Twenty REST API
+    if (campaignId !== undefined) {
+      if (campaignId) {
+        payload.campaignId = { connect: [campaignId] };
+      } else {
+        payload.campaignId = { disconnect: true };
+      }
+    }
     if (scriptData !== undefined) payload.scriptData = JSON.stringify(scriptData);
 
     if (Object.keys(payload).length === 0) {
