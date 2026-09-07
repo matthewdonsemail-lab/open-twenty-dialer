@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { BookOpen, AlertTriangle, Search, Plus, Trash2, Save, X } from "lucide-react";
+import { BookOpen, AlertTriangle, Search, Plus, Trash2, Save, X, Check } from "lucide-react";
 import { useFloating, autoUpdate, offset, flip, shift, FloatingPortal } from "@floating-ui/react";
 import { PageCanvas } from "@/components/common/PageCanvas";
 import { WidgetCard } from "@/components/ui/WidgetCard";
@@ -92,6 +92,9 @@ export function ScriptsPage() {
   const [categories, setCategories] = useState<string[]>(["General", "Objection Handling", "Introduction", "Follow-up", "Closing"]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [saving, setSaving] = useState(false);
+  const [newObjection, setNewObjection] = useState("");
+  const [newResponse, setNewResponse] = useState("");
+  const [showAddObjection, setShowAddObjection] = useState(false);
 
   // Load campaigns for selector
   useEffect(() => {
@@ -181,22 +184,21 @@ export function ScriptsPage() {
     }
   };
 
-  const addObjection = () => {
-    const objection = prompt("Enter objection:");
-    if (!objection) return;
-    const response = prompt("Enter response:");
-    if (editForm) {
-      setEditForm({
-        ...editForm,
-        scriptData: {
-          ...editForm.scriptData,
-          objection_responses: {
-            ...editForm.scriptData.objection_responses,
-            [objection]: { response: response || "", category: editForm.scriptData.category },
-          },
+  const handleAddObjection = () => {
+    if (!newObjection.trim() || !editForm) return;
+    setEditForm({
+      ...editForm,
+      scriptData: {
+        ...editForm.scriptData,
+        objection_responses: {
+          ...editForm.scriptData.objection_responses,
+          [newObjection.trim()]: { response: newResponse || "", category: editForm.scriptData.category },
         },
-      });
-    }
+      },
+    });
+    setNewObjection("");
+    setNewResponse("");
+    setShowAddObjection(false);
   };
 
   const removeObjection = (objection: string) => {
@@ -447,7 +449,7 @@ export function ScriptsPage() {
                     </h3>
                     {isEditing && (
                       <button
-                        onClick={addObjection}
+                        onClick={() => setShowAddObjection(!showAddObjection)}
                         className="text-[11px] text-[var(--ods-brand-600)] hover:text-[var(--ods-brand-700)]"
                       >
                         + Add Objection
@@ -511,6 +513,47 @@ export function ScriptsPage() {
                     <p className="text-[12px] text-[var(--ods-text-tertiary)]">No objections added yet. Click "+ Add Objection" to add one.</p>
                   ) : (
                     <p className="text-[12px] text-[var(--ods-text-tertiary)]">No objections yet.</p>
+                  )}
+
+                  {/* Add Objection Form */}
+                  {isEditing && showAddObjection && (
+                    <div className="border border-[var(--ods-brand-300)] rounded-[4px] p-3 bg-[var(--ods-brand-50)]">
+                      <div className="space-y-2">
+                        <input
+                          type="text"
+                          value={newObjection}
+                          onChange={(e) => setNewObjection(e.target.value)}
+                          className="w-full px-2 py-1 text-[12px] border border-[var(--ods-border)] rounded bg-[var(--ods-bg-primary)] text-[var(--ods-text-primary)]"
+                          placeholder="Enter objection..."
+                        />
+                        <textarea
+                          value={newResponse}
+                          onChange={(e) => setNewResponse(e.target.value)}
+                          className="w-full px-2 py-1 text-[12px] border border-[var(--ods-border)] rounded bg-[var(--ods-bg-primary)] text-[var(--ods-text-primary)] min-h-[60px]"
+                          placeholder="Enter response..."
+                        />
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={handleAddObjection}
+                            disabled={!newObjection.trim()}
+                            className="h-6 px-2.5 rounded-[4px] text-[11px] font-medium bg-[var(--ods-brand-600)] text-white hover:opacity-90 transition-opacity flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <Check className="w-3 h-3" />
+                            Add
+                          </button>
+                          <button
+                            onClick={() => {
+                              setShowAddObjection(false);
+                              setNewObjection("");
+                              setNewResponse("");
+                            }}
+                            className="h-6 px-2.5 rounded-[4px] text-[11px] font-medium text-[var(--ods-text-secondary)] hover:text-[var(--ods-text-primary)] transition-colors"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    </div>
                   )}
                 </div>
               </div>
