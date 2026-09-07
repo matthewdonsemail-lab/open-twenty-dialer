@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { PageCanvas } from "@/components/common/PageCanvas";
 import { WidgetCard } from "@/components/ui/WidgetCard";
+import { Spokes } from "@/components/ui/Spinner";
 
 export function DashboardPage() {
   const { data: leads, isLoading: leadsLoading } = useLeads();
@@ -43,7 +44,7 @@ export function DashboardPage() {
   if (leadsLoading || logsLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600" />
+        <Spokes className="h-8 w-8 text-brand-600" />
       </div>
     );
   }

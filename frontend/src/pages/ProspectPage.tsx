@@ -40,6 +40,7 @@ export function ProspectPage() {
     queryFn: async () => {
       return api.prospects.list();
     },
+    staleTime: Infinity,
   });
 
   const [showForm, setShowForm] = useState(false);

@@ -14,6 +14,7 @@ import { WidgetCard } from "@/components/ui/WidgetCard";
 import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import { ArrowLeft, Edit3, Trash2, Phone, Mail, Globe, MapPin, FileText } from "lucide-react";
+import { Spokes } from "@/components/ui/Spinner";
 
 export function LeadDetailPage() {
   const { leadId } = useParams<{ leadId: string }>();
@@ -85,7 +86,7 @@ export function LeadDetailPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--ods-brand-600)]" />
+        <Spokes className="h-8 w-8 text-[var(--ods-brand-600)]" />
       </div>
     );
   }

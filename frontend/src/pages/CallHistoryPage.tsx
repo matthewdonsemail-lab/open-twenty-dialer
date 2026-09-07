@@ -1,15 +1,19 @@
 import React, { useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useCallLogs } from "@/hooks/useCallLogs";
-import { Search, Phone } from "lucide-react";
+import { Search, Phone, User } from "lucide-react";
 import { StatusBadge } from "@/components/common/StatusBadge";
+import { Spokes } from "@/components/ui/Spinner";
 import type { Database } from "@/types/database";
 import { api } from "@/lib/apiClient";
 
 type Lead = Database["public"]["Tables"]["leads"]["Row"];
+type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 type CallLog = Database["public"]["Tables"]["call_logs"]["Row"];
 
 export function CallHistoryPage() {
+  const navigate = useNavigate();
   const { data: callLogs, isLoading } = useCallLogs();
   const [searchQuery, setSearchQuery] = useState("");
   const [outcomeFilter, setOutcomeFilter] = useState<string>("all");
@@ -25,7 +29,25 @@ export function CallHistoryPage() {
       return map;
     },
     enabled: leadIds.length > 0,
+    staleTime: Infinity,
   });
+
+  // Fetch all users/profiles
+  const { data: profiles } = useQuery<Profile[]>({
+    queryKey: ["profiles"],
+    queryFn: async () => {
+      const res = await api.profiles.list();
+      return res as Profile[];
+    },
+    staleTime: Infinity,
+  });
+
+  const profilesMap = useMemo(() => {
+    if (!profiles) return {};
+    const map: Record<string, Profile> = {};
+    profiles.forEach((p) => { map[p.id] = p; });
+    return map;
+  }, [profiles]);
 
   const filtered = useMemo(() => {
     if (!callLogs) return [];
@@ -34,15 +56,17 @@ export function CallHistoryPage() {
       const q = searchQuery.toLowerCase();
       const lead = log.lead_id ? leadsMap?.[log.lead_id] : null;
       const leadName = lead ? `${lead.first_name ?? ""} ${lead.last_name ?? ""}`.toLowerCase() : "";
-      const matchesSearch = !q || leadName.includes(q) || (log.notes ?? "").toLowerCase().includes(q);
+      const user = log.user_id ? profilesMap?.[log.user_id] : null;
+      const userName = user?.full_name?.toLowerCase() || "";
+      const matchesSearch = !q || leadName.includes(q) || (log.notes ?? "").toLowerCase().includes(q) || userName.includes(q);
       return matchesOutcome && matchesSearch;
     });
-  }, [callLogs, outcomeFilter, searchQuery, leadsMap]);
+  }, [callLogs, outcomeFilter, searchQuery, leadsMap, profilesMap]);
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600"></div>
+        <Spokes className="h-8 w-8 text-[var(--ods-brand-600)]" />
       </div>
     );
   }
@@ -90,6 +114,7 @@ export function CallHistoryPage() {
         <table className="w-full border-collapse text-left">
           <thead className="sticky top-0 bg-[var(--ods-bg-secondary)] z-10">
             <tr className="h-8 border-b border-[var(--ods-border)]">
+              <th className="px-3 text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-secondary)]">Agent</th>
               <th className="px-3 text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-secondary)]">Lead</th>
               <th className="px-3 text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-secondary)]">Outcome</th>
               <th className="px-3 text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-secondary)]">Duration</th>
@@ -100,15 +125,28 @@ export function CallHistoryPage() {
           <tbody className="divide-y divide-[var(--ods-border)]">
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={5} className="text-center py-8 text-[13px] text-[var(--ods-text-secondary)]">
+                <td colSpan={6} className="text-center py-8 text-[13px] text-[var(--ods-text-secondary)]">
                   No call records found
                 </td>
               </tr>
             ) : filtered.map((log) => {
               const lead = log.lead_id ? leadsMap?.[log.lead_id] : null;
               const leadName = lead ? `${lead.first_name ?? ""} ${lead.last_name ?? ""}`.trim() || lead.phone || "—" : "—";
+              const user = log.user_id ? profilesMap?.[log.user_id] : null;
+              const agentName = user?.full_name || "Unknown";
+
               return (
-                <tr key={log.id} className="h-8 hover:bg-[var(--ods-bg-secondary)] transition-colors">
+                <tr
+                  key={log.id}
+                  onClick={() => navigate(`/history/${log.id}`)}
+                  className="h-8 hover:bg-[var(--ods-bg-secondary)] transition-colors cursor-pointer"
+                >
+                  <td className="px-3">
+                    <div className="flex items-center gap-2">
+                      <User className="w-3.5 h-3.5 text-[var(--ods-text-tertiary)]" />
+                      <span className="text-[13px] font-medium truncate max-w-[150px] cursor-pointer hover:text-[var(--ods-brand-600)] transition-colors">{agentName}</span>
+                    </div>
+                  </td>
                   <td className="px-3">
                     <div className="flex items-center gap-2">
                       <Phone className="w-3.5 h-3.5 text-[var(--ods-text-tertiary)]" />

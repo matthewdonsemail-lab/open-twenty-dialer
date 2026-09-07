@@ -97,6 +97,18 @@ export const api = {
       request<void>(`/api/campaigns/${id}`, { method: "DELETE" }),
   },
 
+  twentyCampaigns: {
+    list: () => request<any[]>("/api/twenty/campaigns"),
+  },
+
+  twentyPhones: {
+    list: () => request<any[]>("/api/twenty/phones"),
+  },
+
+  profiles: {
+    list: () => request<any[]>("/api/profiles"),
+  },
+
   callLogs: {
     list: () => request<any[]>("/api/call-logs"),
     getByLead: (leadId: string) => request<any[]>(`/api/call-logs/lead/${leadId}`),

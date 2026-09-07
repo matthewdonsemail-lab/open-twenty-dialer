@@ -296,8 +296,88 @@ MIT License — see [LICENSE](LICENSE) for details.
 
 ---
 
+## Troubleshooting
+
+### Twenty CRM API 401/403 Errors
+
+**Problem:** Getting `401 Authorization Required` or `403 Missing authentication token` from Twenty CRM endpoints.
+
+**Solution:** This is almost always an nginx proxy misconfiguration on the server. Check these common issues:
+
+#### 1. Nginx Proxy Port Mismatch (Most Common)
+
+The `auth-guard` container (nginx) must proxy Twenty requests to the correct port. Common mistake:
+
+```nginx
+# WRONG - old default port
+proxy_pass http://127.0.0.1:13000;
+
+# CORRECT - actual Twenty server port
+proxy_pass http://127.0.0.1:3005;
+```
+
+**Fix:** Update the nginx config in `/home/deepman/services/auth-guard/nginx.conf` and restart:
+```bash
+# Copy updated config
+scp ops/node01/auth-guard-nginx.conf deepman@node01:/tmp/nginx.conf
+tailscale ssh deepman@node01 "docker restart auth-guard"
+```
+
+#### 2. Verify API Key is Valid
+
+Test your API key directly against Twenty:
+```bash
+curl -s "https://twenty.yourdomain.com/rest/agencyProspects?limit=1" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+Should return `200 OK` with data or empty array, NOT `401` or `403`.
+
+#### 3. Check Twenty Server Status
+
+Ensure Twenty containers are running:
+```bash
+docker ps | grep twenty
+# Should show: twenty-server, twenty-worker, twenty-postgres, twenty-redis
+```
+
+If server is down:
+```bash
+cd /home/deepman/services/twenty
+docker compose up -d server
+```
+
+#### 4. Database Connection
+
+The backend connects to Twenty's PostgreSQL for user verification:
+```bash
+# Test connection
+docker exec twenty-postgres psql -U twenty -d twenty -c "SELECT 1;"
+```
+
+### Nginx Configuration Files
+
+**Location:** `/home/deepman/services/auth-guard/nginx.conf`
+
+**Key settings for Twenty proxy:**
+- Listen port: `3000`
+- Proxy path: `/rest`, `/graphql`, `/metadata`, `/webhooks`
+- Backend: `http://127.0.0.1:3005` (NOT 13000)
+
+### Common Error Messages
+
+| Error | Cause | Fix |
+|-------|-------|-----|
+| `401 Authorization Required` | Wrong API key or expired token | Generate new key in Twenty UI |
+| `403 Missing authentication token` | Nginx not forwarding Authorization header | Check nginx proxy-params.conf |
+| `502 Bad Gateway` | Nginx pointing to wrong port | Update proxy_pass to port 3005 |
+| `504 Gateway Timeout` | Twenty server not responding | Check if twenty-server container is running |
+
+---
+
 ## Documentation
 
 - [Data Model](docs/okf/datamodel/open-cold-dialer.md) — Detailed architecture and sync documentation
 - [SIP Providers Guide](docs/sip-providers.md) — Configure your SIP provider
 - [Twenty CRM Integration](docs/twenty-integration.md) — Sync configuration guide
+- [Twenty Troubleshooting](docs/twenty-troubleshooting.md) — Common issues and fixes (401/403 errors, nginx config, API keys)

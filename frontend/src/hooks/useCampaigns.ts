@@ -10,6 +10,7 @@ export function useCampaigns() {
     queryFn: async () => {
       return api.campaigns.list();
     },
+    staleTime: Infinity,
   });
 }
 

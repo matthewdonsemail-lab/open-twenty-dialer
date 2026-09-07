@@ -10,6 +10,7 @@ export function useLeads() {
     queryFn: async () => {
       return api.leads.list();
     },
+    staleTime: Infinity,
   });
 }
 
@@ -20,6 +21,7 @@ export function useLead(leadId: string) {
       return api.leads.get(leadId);
     },
     enabled: !!leadId,
+    staleTime: Infinity,
   });
 }
 

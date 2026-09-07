@@ -4,6 +4,8 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { signOut } from '@/lib/auth';
 import { api } from '@/lib/apiClient';
+import { Spokes } from '@/components/ui/Spinner';
+import { cn } from '@/lib/utils';
 import {
   LayoutDashboard,
   Users,
@@ -23,9 +25,11 @@ import {
 const navItems = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/leads', label: 'Leads', icon: Users },
+  { to: '/prospects', label: 'Prospects', icon: Target },
   { to: '/campaigns', label: 'Campaigns', icon: Target },
   { to: '/scripts', label: 'Scripts', icon: FileText },
   { to: '/history', label: 'Call History', icon: Clock },
+  { to: '/phone-numbers', label: 'Phone Numbers', icon: Phone },
   { to: '/admin', label: 'Admin', icon: Shield },
 ];
 
@@ -55,6 +59,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     queryKey: ['lead', leadId],
     queryFn: () => api.leads.get(leadId ?? ''),
     enabled: !!leadId,
+    staleTime: Infinity,
   });
 
   // Fetch prospect name
@@ -62,6 +67,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     queryKey: ['prospect', prospectId],
     queryFn: () => api.prospects.get(prospectId ?? ''),
     enabled: !!prospectId,
+    staleTime: Infinity,
   });
 
   async function handleSignOut() {
@@ -185,7 +191,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   <span className="text-[var(--ods-text-tertiary,#8a8a93)]">/</span>
                   <span className="font-semibold text-[var(--ods-text-primary,#18181b)] truncate max-w-[200px]">
                     <span className="text-[var(--ods-text-tertiary,#8a8a93)]">Name:</span>{' '}
-                    {lead ? `${lead.first_name} ${lead.last_name}` : 'Loading...'}
+                    {lead ? `${lead.first_name} ${lead.last_name}` : (
+                      <Spokes className="w-3 h-3 inline-block align-middle text-[var(--ods-text-tertiary,#8a8a93)] ml-1" />
+                    )}
                   </span>
                 </>
               ) : isProspectDetail ? (
@@ -200,7 +208,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   <span className="text-[var(--ods-text-tertiary,#8a8a93)]">/</span>
                   <span className="font-semibold text-[var(--ods-text-primary,#18181b)] truncate max-w-[200px]">
                     <span className="text-[var(--ods-text-tertiary,#8a8a93)]">Name:</span>{' '}
-                    {prospect ? `${prospect.first_name} ${prospect.last_name}` : 'Loading...'}
+                    {prospect ? `${prospect.first_name} ${prospect.last_name}` : (
+                      <Spokes className="w-3 h-3 inline-block align-middle text-[var(--ods-text-tertiary,#8a8a93)] ml-1" />
+                    )}
                   </span>
                 </>
               ) : (

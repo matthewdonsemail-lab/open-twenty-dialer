@@ -11,6 +11,7 @@ import { WidgetCard } from "@/components/ui/WidgetCard";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { ArrowLeft, Edit3, Trash2, FileText } from "lucide-react";
+import { Spokes } from "@/components/ui/Spinner";
 import { useToast } from "@/components/ui/Toast";
 
 interface Prospect {
@@ -41,6 +42,7 @@ export function ProspectDetailPage() {
   const { data: prospect, isLoading } = useQuery<Prospect>({
     queryKey: ["prospect", prospectId],
     queryFn: () => api.prospects.get(prospectId ?? ""),
+    staleTime: Infinity,
   });
 
   const updateProspect = useMutation({
@@ -109,7 +111,7 @@ export function ProspectDetailPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--ods-brand-600)]" />
+        <Spokes className="h-8 w-8 text-[var(--ods-brand-600)]" />
       </div>
     );
   }
@@ -142,7 +144,7 @@ export function ProspectDetailPage() {
           <span>
             {prospect.first_name} {prospect.last_name}
           </span>
-          <StatusBadge status={prospect.status} />
+          <StatusBadge status={prospect.status ?? "unknown"} />
         </div>
       }
       subtitle={prospect.company ?? "No company"}

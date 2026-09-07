@@ -4,6 +4,7 @@ import { signIn } from "@/lib/auth";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { LogIn, Mail, Lock, AlertCircle } from "lucide-react";
 import { z } from "zod";
+import { TropicalTideBackground } from "@/components/background-gradient/tropical-tide-background";
 
 const loginSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
@@ -48,13 +49,9 @@ export function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-brand-50 to-brand-100 px-4">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-brand-900">Cold Dialer</h1>
-          <p className="text-brand-600 mt-2">Open-source SIP-powered dialer</p>
-        </div>
-        <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-lg p-8 space-y-5">
+    <TropicalTideBackground className="min-h-screen flex items-center justify-center px-4">
+      <div className="w-full max-w-md py-16">
+        <form onSubmit={handleSubmit} className="bg-white/80 backdrop-blur-sm rounded-xl shadow-lg p-8 space-y-5">
           <h2 className="text-xl font-semibold text-gray-800">Sign In</h2>
           {error && (
             <div className="flex items-center gap-2 text-red-600 bg-red-50 p-3 rounded-lg text-sm">
@@ -109,6 +106,6 @@ export function LoginPage() {
           </p>
         </form>
       </div>
-    </div>
+    </TropicalTideBackground>
   );
 }

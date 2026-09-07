@@ -1,46 +1,50 @@
 import React, { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useCreateCampaign } from "@/hooks/useCampaigns";
-import { useDeleteCampaign } from "@/hooks/useCampaigns";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { Plus, Edit3, Trash2, Search, Target, Clock } from "lucide-react";
 import { PageCanvas } from "@/components/common/PageCanvas";
 import { WidgetCard } from "@/components/ui/WidgetCard";
-import type { Database } from "@/types/database";
 import { api } from "@/lib/apiClient";
-import { CampaignForm } from "@/components/campaigns/CampaignForm";
+import { Spokes } from "@/components/ui/Spinner";
 
-type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
+type AgencyCampaign = {
+  id: string;
+  name?: string;
+  utmSource?: string;
+  status?: string;
+  note?: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
 
 export function CampaignPage() {
-  const { data: campaigns, isLoading } = useQuery<Campaign[]>({
-    queryKey: ["campaigns"],
+  const { data: campaigns, isLoading } = useQuery<AgencyCampaign[]>({
+    queryKey: ["twentyCampaigns"],
     queryFn: async () => {
-      return api.campaigns.list();
+      return api.twentyCampaigns.list();
     },
+    staleTime: Infinity,
   });
-  const createCampaign = useCreateCampaign();
-  const deleteCampaign = useDeleteCampaign();
 
   const [showForm, setShowForm] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const [deleteConfirm, setDeleteConfirm] = useState<Campaign | null>(null);
-  const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<AgencyCampaign | null>(null);
+  const [editingCampaign, setEditingCampaign] = useState<AgencyCampaign | null>(null);
 
   const filtered = useMemo(() => {
     if (!campaigns) return [];
     return campaigns.filter((c) => {
       const matchesStatus = statusFilter === "all" || c.status === statusFilter;
       const q = searchQuery.toLowerCase();
-      const matchesSearch = !q || c.name.toLowerCase().includes(q);
+      const matchesSearch = !q || (c.name ?? "").toLowerCase().includes(q);
       return matchesStatus && matchesSearch;
     });
   }, [campaigns, statusFilter, searchQuery]);
 
-  async function handleDelete(campaign: Campaign) {
-    await deleteCampaign.mutateAsync(campaign.id);
+  async function handleDelete(campaign: AgencyCampaign) {
+    // TODO: implement Twenty API delete
     setDeleteConfirm(null);
   }
 
@@ -65,9 +69,9 @@ export function CampaignPage() {
             className="px-3 py-1.5 text-[12px] border border-[var(--ods-border)] rounded-[4px] bg-[var(--ods-bg-primary)] text-[var(--ods-text-primary)] outline-none focus:border-[var(--ods-brand-500)] appearance-none cursor-pointer"
           >
             <option value="all">All</option>
-            <option value="active">Active</option>
-            <option value="paused">Paused</option>
-            <option value="completed">Completed</option>
+            <option value="ACTIVE">Active</option>
+            <option value="PAUSED">Paused</option>
+            <option value="DRAFT">Draft</option>
           </select>
           <button
             onClick={() => setShowForm(true)}
@@ -79,26 +83,30 @@ export function CampaignPage() {
         </>
       }
     >
-      {filtered.length === 0 ? (
+      {isLoading ? (
+        <div className="flex items-center justify-center h-64">
+          <Spokes className="h-8 w-8 text-[var(--ods-brand-600)]" />
+        </div>
+      ) : filtered.length === 0 ? (
         <div className="text-center py-12 text-[13px] text-[var(--ods-text-secondary)] bg-[var(--ods-bg-secondary)] border border-[var(--ods-border)] rounded-[6px]">
-          No campaigns found
+          No campaigns found in Twenty CRM
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {filtered.map((campaign) => (
             <WidgetCard
               key={campaign.id}
-              title={campaign.name}
-              action={<StatusBadge status={campaign.status} />}
+              title={campaign.name || "Unnamed Campaign"}
+              action={<StatusBadge status={(campaign.status as any) || "DRAFT"} />}
             >
               <div className="space-y-2">
                 <div className="flex items-center gap-2 text-[12px] text-[var(--ods-text-secondary)]">
                   <Target className="w-3.5 h-3.5 text-[var(--ods-text-tertiary)]" />
-                  <span className="capitalize">{campaign.type}</span>
+                  <span className="capitalize">{campaign.utmSource || "outbound"}</span>
                 </div>
                 <div className="flex items-center gap-2 text-[12px] text-[var(--ods-text-secondary)]">
                   <Clock className="w-3.5 h-3.5 text-[var(--ods-text-tertiary)]" />
-                  <span>Created {new Date(campaign.created_at).toLocaleDateString()}</span>
+                  <span>Created {campaign.createdAt ? new Date(campaign.createdAt).toLocaleDateString() : "—"}</span>
                 </div>
               </div>
               <div className="flex gap-2 mt-3 pt-3 border-t border-[var(--ods-border)]">
@@ -121,19 +129,24 @@ export function CampaignPage() {
       )}
 
       {showForm && (
-        <CampaignForm
-          onClose={() => setShowForm(false)}
-          onSubmit={async (data) => {
-            await createCampaign.mutateAsync(data);
-            setShowForm(false);
-          }}
-        />
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-[var(--ods-bg-primary)] rounded-[6px] p-4 w-full max-w-md">
+            <h3 className="text-[13px] font-semibold mb-4">New Campaign</h3>
+            <p className="text-[12px] text-[var(--ods-text-secondary)]">Create campaign in Twenty CRM (integration pending)</p>
+            <button
+              onClick={() => setShowForm(false)}
+              className="mt-4 px-3 py-1.5 text-[12px] bg-[var(--ods-bg-secondary)] rounded-[4px] hover:bg-[var(--ods-border)]"
+            >
+              Close
+            </button>
+          </div>
+        </div>
       )}
 
       <ConfirmDialog
         open={!!deleteConfirm}
         title="Delete Campaign"
-        message="Delete this campaign? Leads will not be deleted."
+        message="Delete this campaign from Twenty CRM?"
         variant="danger"
         confirmLabel="Delete"
         onConfirm={() => deleteConfirm && handleDelete(deleteConfirm)}

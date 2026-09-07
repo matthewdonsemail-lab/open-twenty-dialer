@@ -10,6 +10,7 @@ export function useCallLogs() {
     queryFn: async () => {
       return api.callLogs.list();
     },
+    staleTime: Infinity,
   });
 }
 
@@ -20,6 +21,7 @@ export function useCallLog(leadId: string) {
       return api.callLogs.getByLead(leadId);
     },
     enabled: !!leadId,
+    staleTime: Infinity,
   });
 }
 
