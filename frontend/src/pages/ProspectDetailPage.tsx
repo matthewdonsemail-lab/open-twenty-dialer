@@ -199,8 +199,8 @@ export function ProspectDetailPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-[var(--ods-sp-6)] items-start">
           <Softphone lead={prospect as any} onCallEnd={handleCallEnd} />
           <CallScriptWidget campaignId={prospect?.campaign_id ?? null} />
-          <WidgetCard title="Prospect Details">
-            <div className="flex flex-col gap-[var(--ods-sp-4)]">
+          <WidgetCard title="Prospect Details" className="h-[460px]">
+            <div className="flex flex-col gap-[var(--ods-sp-4)] h-full overflow-y-auto pr-1">
               {/* Status with StatusSelect */}
               <div>
                 <dt className="text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-tertiary)] mb-2">

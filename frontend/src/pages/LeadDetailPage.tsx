@@ -165,7 +165,7 @@ export function LeadDetailPage() {
     >
       <div className="flex flex-col gap-[var(--ods-sp-6)]">
         {/* Main Dialing Row: Softphone + Call Script + Lead Details */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-[var(--ods-sp-6)] items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-[var(--ods-sp-6)] items-stretch">
           <Softphone lead={lead} onCallEnd={handleCallEnd} />
           <CallScriptWidget campaignId={lead.campaign_id ?? null} />
           <WidgetCard title="Lead Details">

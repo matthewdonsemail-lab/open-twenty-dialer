@@ -34,7 +34,7 @@ export function WidgetCard({
           {action && <div className="flex-shrink-0 ml-2">{action}</div>}
         </div>
       )}
-      <div className="p-3 md:p-4 flex-1">{children}</div>
+      <div className="p-3 md:p-4 flex-1 overflow-auto">{children}</div>
     </div>
   );
 }

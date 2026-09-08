@@ -506,13 +506,11 @@ export function Softphone({ lead, onCallEnd }: SoftphoneProps) {
 
   if (!lead) {
     return (
-      <div className="bg-[var(--ods-bg-secondary)] border border-[var(--ods-border)] rounded-ods-md p-6">
-        <div className="flex items-center justify-center h-48 text-[var(--ods-text-tertiary)]">
-          <div className="text-center">
-            <Phone className="w-12 h-12 mx-auto mb-3 opacity-50" />
-            <p className="text-[13px] font-medium">Select a lead to start a call</p>
-            <p className="text-[11px] mt-1">Navigate to a lead detail page and use the dialer</p>
-          </div>
+      <div className="bg-[var(--ods-bg-secondary)] border border-[var(--ods-border)] rounded-ods-md p-6 h-[460px] flex items-center justify-center">
+        <div className="text-center text-[var(--ods-text-tertiary)]">
+          <Phone className="w-12 h-12 mx-auto mb-3 opacity-50" />
+          <p className="text-[13px] font-medium">Select a lead to start a call</p>
+          <p className="text-[11px] mt-1">Navigate to a lead detail page and use the dialer</p>
         </div>
       </div>
     );
@@ -524,9 +522,9 @@ export function Softphone({ lead, onCallEnd }: SoftphoneProps) {
       <audio ref={remoteAudioRef} hidden />
       <audio ref={localAudioRef} hidden />
 
-      <div className="bg-[var(--ods-bg-secondary)] border border-[var(--ods-border)] rounded-ods-md overflow-hidden">
+      <div className="bg-[var(--ods-bg-secondary)] border border-[var(--ods-border)] rounded-ods-md overflow-hidden h-[460px] flex flex-col">
         {/* 40px header, flat */}
-        <div className="h-10 min-h-[40px] px-4 border-b border-[var(--ods-border)] flex items-center gap-3">
+        <div className="h-10 min-h-[40px] px-4 border-b border-[var(--ods-border)] flex items-center gap-3 shrink-0">
           <div className="w-6 h-6 rounded-full bg-[var(--ods-bg-tertiary)] flex items-center justify-center shrink-0">
             <Phone className="w-3.5 h-3.5 text-[var(--ods-text-secondary)]" />
           </div>
@@ -559,7 +557,7 @@ export function Softphone({ lead, onCallEnd }: SoftphoneProps) {
           </div>
         </div>
 
-        <div className="p-4 flex flex-col gap-4">
+        <div className="p-4 flex flex-col gap-4 flex-1 overflow-y-auto">
           <p className="text-[12px] text-[var(--ods-text-tertiary)] truncate -mt-1">
             {lead.company ?? lead.email ?? "No contact info"}
           </p>
