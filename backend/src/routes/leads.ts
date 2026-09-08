@@ -293,7 +293,16 @@ router.patch("/:id", async (req: AuthRequest, res) => {
     const id = req.params.id as string;
     const result = await updateTwenty<any>('agencyLeads', id, payload);
     const lead = result.data || result;
-    
+
+    // Fetch campaigns to resolve campaign types
+    let campaignMap: Record<string, string> = {};
+    try {
+      const campaigns = await listTwenty<AgencyCampaign>('agencyCampaigns', 100);
+      campaignMap = Object.fromEntries(campaigns.map(c => [c.id, c.utmSource || 'outbound']));
+    } catch {
+      // Campaign lookup is best-effort; proceed without it
+    }
+
     // Return mapped response
     const fullName = lead.name || lead.contactName || "";
     const parts = fullName.split(" ");

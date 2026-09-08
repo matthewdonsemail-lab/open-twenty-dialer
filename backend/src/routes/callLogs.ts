@@ -33,7 +33,8 @@ router.get("/lead/:leadId", async (req: AuthRequest, res: Response) => {
 // Get call log by ID
 router.get("/:id", async (req: AuthRequest, res: Response) => {
   try {
-    const callLog = await twentyClient.get<any>('agencyCallLogs', req.params.id);
+    const id = req.params.id as string;
+    const callLog = await twentyClient.get<any>('agencyCallLogs', id);
     res.json(callLog);
   } catch (err: any) {
     res.status(404).json({ error: "Call log not found" });

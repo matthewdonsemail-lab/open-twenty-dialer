@@ -20,7 +20,8 @@ router.get("/", async (req: AuthRequest, res: Response) => {
 // Get profile by ID
 router.get("/:id", async (req: AuthRequest, res: Response) => {
   try {
-    const profile = await twentyClient.get<any>('agencyProfiles', req.params.id);
+    const id = req.params.id as string;
+    const profile = await twentyClient.get<any>('agencyProfiles', id);
     res.json(profile);
   } catch (err: any) {
     res.status(404).json({ error: "Profile not found" });

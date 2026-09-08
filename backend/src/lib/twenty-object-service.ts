@@ -6,7 +6,7 @@ const log = createLogger('twenty-object-service');
 /**
  * Execute a GraphQL mutation against Twenty's metadata API
  */
-async function graphqlMutation<T>(mutation: string): Promise<T> {
+async function graphqlMutation<T = any>(mutation: string): Promise<T> {
   const cfg = loadSyncConfig();
   const url = `${cfg.twentyBaseUrl}/graphql`;
 

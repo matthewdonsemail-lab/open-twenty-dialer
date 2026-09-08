@@ -14,7 +14,7 @@ const log = createLogger('twenty-setup');
  */
 router.post("/", async (req: AuthRequest, res) => {
   try {
-    log.info(`Setup request from user: ${req.user?.email || 'unknown'}`);
+    log.info(`Setup request from user: ${req.userEmail || 'unknown'}`);
 
     const results = await setupTwentyCRM();
 
