@@ -596,3 +596,43 @@ docker compose up -d server
 - [SIP Providers Guide](docs/sip-providers.md) — Configure your SIP provider
 - [Twenty CRM Integration](docs/twenty-integration.md) — Sync configuration guide
 - [Twenty Troubleshooting](docs/twenty-troubleshooting.md) — Common issues and fixes
+
+---
+
+## Future Improvements
+
+### Twenty CRM SDK Integration
+
+**Goal:** Migrate from custom fetch-based implementation to Twenty's official SDK for better type safety and maintainability.
+
+**What we tried:**
+1. Installed `twenty-client-sdk` package
+2. Attempted to use `RestApiClient` from `twenty-client-sdk/rest`
+3. Created TypeScript interfaces in `backend/src/types/twenty.ts`
+4. Updated all route handlers to use typed responses
+
+**Why it didn't work:**
+- The SDK's `RestApiClient` returns responses in a different format than raw fetch
+- Response parsing broke — all queries returned 0 records
+- The SDK wraps responses differently than Twenty's native API format
+
+**Lessons learned:**
+- Twenty's REST API returns: `{ data: { agencyProspects: [...] }, totalCount: N, pageInfo: {...} }`
+- The SDK's response shape didn't match our extraction logic
+- For now, keeping the custom fetch-based implementation works reliably
+
+**To try again in the future:**
+```bash
+# Install the SDK
+cd backend
+npm install twenty-client-sdk
+
+# Generate typed clients
+npx twenty dev:generate-client --remote https://twenty.yourdomain.com --api-key YOUR_KEY
+```
+
+**Key findings from the migration attempt:**
+- Twenty uses `{fieldName}Id` pattern for relation fields in REST API (e.g., `campaignIdId`)
+- GraphQL mutations work for metadata operations (creating objects/fields)
+- The `twentyClient` object should export both named functions AND an object wrapper
+- Response parsing must handle multiple shapes: direct array, `{ data: [...] }`, `{ data: { objectName: [...] } }`
