@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/apiClient";
@@ -24,6 +24,11 @@ interface Prospect {
   company?: string;
   phone?: string;
   email?: string;
+  website?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
   status?: string;
   source?: string;
   campaign_id?: string | null;
@@ -127,7 +132,7 @@ export function ProspectPage() {
     try {
       await api.prospects.update(prospectId, { campaign_id: campaignId });
       queryClient.invalidateQueries({ queryKey: ["prospects"] });
-      const campaignName = campaignId ? (campaigns.find(c => c.id === campaignId)?.name || campaignId) : "None";
+      const campaignName = campaignId ? (campaigns?.find(c => c.id === campaignId)?.name || campaignId) : "None";
       success("Campaign updated", `Campaign set to "${campaignName}"`);
     } catch (err) {
       toastError("Error", "Failed to update campaign");

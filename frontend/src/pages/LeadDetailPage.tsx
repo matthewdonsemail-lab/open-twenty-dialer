@@ -6,7 +6,7 @@ import { useCallLog } from "@/hooks/useCallLogs";
 import { useCreateCallLog } from "@/hooks/useCallLogs";
 import { useUpdateLead, useDeleteLead } from "@/hooks/useLeads";
 import { Softphone } from "@/components/softphone/Softphone";
-import { CallScriptViewer } from "@/components/scripts/CallScriptViewer";
+import { CallScriptWidget } from "@/components/scripts/CallScriptWidget";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { StatusSelect } from "@/components/common/StatusSelect";
 import { mapLeadProspectStatusOptions } from "@/lib/twentyOptions";
@@ -16,7 +16,7 @@ import { WidgetCard } from "@/components/ui/WidgetCard";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { useToast } from "@/components/ui/Toast";
-import { ArrowLeft, Edit3, Trash2, Phone, Mail, Globe, MapPin, FileText } from "lucide-react";
+import { ArrowLeft, Edit3, Trash2, Phone, Mail, Globe, MapPin } from "lucide-react";
 import { Spokes } from "@/components/ui/Spinner";
 import { api } from "@/lib/apiClient";
 
@@ -27,7 +27,6 @@ export function LeadDetailPage() {
   const { data: lead, isLoading } = useLead(leadId ?? "");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
-  const [showScript, setShowScript] = useState(false);
 
   React.useEffect(() => {
     if (lead) console.log("LeadDetailPage data:", JSON.stringify(lead, null, 2));
@@ -57,10 +56,6 @@ export function LeadDetailPage() {
   const createCallLog = useCreateCallLog();
   const updateLeadMutation = useUpdateLead();
   const deleteLeadMutation = useDeleteLead();
-
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [showEdit, setShowEdit] = useState(false);
-  const [showScript, setShowScript] = useState(false);
 
   function handleCallEnd(data: { outcome: string; duration: number; notes: string; direction: "outbound" | "inbound" }) {
     createCallLog.mutateAsync({
@@ -168,27 +163,11 @@ export function LeadDetailPage() {
         </>
       }
     >
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-[var(--ods-sp-6)]">
-        <div className="lg:col-span-2 flex flex-col gap-[var(--ods-sp-6)]">
+      <div className="flex flex-col gap-[var(--ods-sp-6)]">
+        {/* Main Dialing Row: Softphone + Call Script + Lead Details */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-[var(--ods-sp-6)] items-start">
           <Softphone lead={lead} onCallEnd={handleCallEnd} />
-
-          <WidgetCard title="Call Script" icon={FileText}>
-            <button
-              onClick={() => setShowScript(true)}
-              className="text-[13px] text-[var(--ods-brand-600)] hover:text-[var(--ods-brand-700)] font-medium"
-            >
-              View Script →
-            </button>
-          </WidgetCard>
-
-          <WidgetCard title="Notes">
-            <p className="text-[13px] text-[var(--ods-text-secondary)] whitespace-pre-wrap">
-              {lead.notes ?? "No notes yet"}
-            </p>
-          </WidgetCard>
-        </div>
-
-        <div className="flex flex-col gap-[var(--ods-sp-6)]">
+          <CallScriptWidget campaignId={lead.campaign_id ?? null} />
           <WidgetCard title="Lead Details">
             <div className="flex flex-col gap-[var(--ods-sp-4)]">
               {/* Status with StatusSelect */}
@@ -245,7 +224,15 @@ export function LeadDetailPage() {
               </dl>
             </div>
           </WidgetCard>
+        </div>
 
+        {/* Bottom Row: Notes | Contact Info | Recent Calls */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-[var(--ods-sp-6)]">
+          <WidgetCard title="Notes">
+            <p className="text-[13px] text-[var(--ods-text-secondary)] whitespace-pre-wrap">
+              {lead.notes ?? "No notes yet"}
+            </p>
+          </WidgetCard>
           <WidgetCard title="Contact Info">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-[var(--ods-sp-3)]">
               {lead.phone && (
@@ -282,7 +269,6 @@ export function LeadDetailPage() {
               )}
             </div>
           </WidgetCard>
-
           {callLogs && callLogs.length > 0 && (
             <WidgetCard title="Recent Calls">
               <div className="flex flex-col gap-[var(--ods-sp-3)]">
@@ -317,8 +303,6 @@ export function LeadDetailPage() {
           onCancel={() => setShowDeleteConfirm(false)}
         />
       )}
-
-      {showScript && <CallScriptViewer onClose={() => setShowScript(false)} campaignId={lead?.campaign_id ?? null} />}
 
       {/* NOTE: `showEdit` opens nothing yet — same pre-existing gap as before this pass.
           This is a functional/data-wiring issue (no edit form + unknown useUpdateLead

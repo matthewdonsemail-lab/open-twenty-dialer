@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/apiClient";
 import { Softphone } from "@/components/softphone/Softphone";
-import { CallScriptViewer } from "@/components/scripts/CallScriptViewer";
+import { CallScriptWidget } from "@/components/scripts/CallScriptWidget";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { StatusSelect } from "@/components/common/StatusSelect";
 import { mapLeadProspectStatusOptions } from "@/lib/twentyOptions";
@@ -13,7 +13,7 @@ import { WidgetCard } from "@/components/ui/WidgetCard";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Badge } from "@/components/ui/Badge";
-import { ArrowLeft, Edit3, Trash2, FileText, Phone, Mail, Globe, MapPin } from "lucide-react";
+import { ArrowLeft, Edit3, Trash2, Phone, Mail, Globe, MapPin } from "lucide-react";
 import { Spokes } from "@/components/ui/Spinner";
 import { useToast } from "@/components/ui/Toast";
 
@@ -24,6 +24,11 @@ interface Prospect {
   company?: string;
   phone?: string;
   email?: string;
+  website?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
   status?: string;
   source?: string;
   campaign_id?: string | null;
@@ -42,7 +47,6 @@ export function ProspectDetailPage() {
   const { success, error: toastError } = useToast();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
-  const [showScript, setShowScript] = useState(false);
   const [editingData, setEditingData] = useState<Partial<Prospect>>({});
 
   // Fetch campaigns to resolve campaign_id to name
@@ -190,27 +194,11 @@ export function ProspectDetailPage() {
         </>
       }
     >
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-[var(--ods-sp-6)]">
-        <div className="lg:col-span-2 flex flex-col gap-[var(--ods-sp-6)]">
+      <div className="flex flex-col gap-[var(--ods-sp-6)]">
+        {/* Main Dialing Row: Softphone + Call Script + Prospect Details */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-[var(--ods-sp-6)] items-start">
           <Softphone lead={prospect as any} onCallEnd={handleCallEnd} />
-
-          <WidgetCard title="Call Script" icon={FileText}>
-            <button
-              onClick={() => setShowScript(true)}
-              className="text-[13px] text-[var(--ods-brand-600)] hover:text-[var(--ods-brand-700)] font-medium"
-            >
-              View Script →
-            </button>
-          </WidgetCard>
-
-          <WidgetCard title="Notes" icon={FileText}>
-            <p className="text-[13px] text-[var(--ods-text-secondary)] whitespace-pre-wrap">
-              {prospect.notes ?? "No notes yet"}
-            </p>
-          </WidgetCard>
-        </div>
-
-        <div className="flex flex-col gap-[var(--ods-sp-6)]">
+          <CallScriptWidget campaignId={prospect?.campaign_id ?? null} />
           <WidgetCard title="Prospect Details">
             <div className="flex flex-col gap-[var(--ods-sp-4)]">
               {/* Status with StatusSelect */}
@@ -264,7 +252,15 @@ export function ProspectDetailPage() {
               </dl>
             </div>
           </WidgetCard>
+        </div>
 
+        {/* Bottom Row: Notes | Contact Info */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-[var(--ods-sp-6)]">
+          <WidgetCard title="Notes">
+            <p className="text-[13px] text-[var(--ods-text-secondary)] whitespace-pre-wrap">
+              {prospect.notes ?? "No notes yet"}
+            </p>
+          </WidgetCard>
           <WidgetCard title="Contact Info">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-[var(--ods-sp-3)]">
               {prospect.phone && (
@@ -355,8 +351,6 @@ export function ProspectDetailPage() {
           onCancel={() => setShowDeleteConfirm(false)}
         />
       )}
-
-      {showScript && <CallScriptViewer onClose={() => setShowScript(false)} campaignId={prospect?.campaign_id ?? null} />}
     </PageCanvas>
   );
 }

@@ -296,3 +296,16 @@ export async function listTwenty<T>(path: string, limit = 100): Promise<T[]> {
   log.warn(`No array found in response for ${path}`);
   return [];
 }
+
+// Export a client object with all methods for convenience
+export const twentyClient = {
+  fetch: fetchTwenty,
+  create: createTwenty,
+  update: updateTwenty,
+  delete: deleteTwenty,
+  get: getTwenty,
+  list: listTwenty,
+  graphqlMutation,
+  updateGraphQL: updateTwentyGraphQL,
+  loadSyncConfig,
+};

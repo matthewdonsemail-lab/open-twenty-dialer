@@ -118,4 +118,17 @@ export const api = {
         `/api/twenty/meta/${objectName}`
       ),
   },
+
+  callLogs: {
+    list: () => request<any[]>("/api/call-logs"),
+    get: (id: string) => request<any>(`/api/call-logs/${id}`),
+    getByLead: (leadId: string) => request<any[]>(`/api/call-logs/lead/${leadId}`),
+    create: (data: any) =>
+      request<any>("/api/call-logs", { method: "POST", body: JSON.stringify(data) }),
+  },
+
+  profiles: {
+    list: () => request<any[]>("/api/profiles"),
+    get: (id: string) => request<any>(`/api/profiles/${id}`),
+  },
 };

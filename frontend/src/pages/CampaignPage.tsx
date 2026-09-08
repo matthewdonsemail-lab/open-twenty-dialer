@@ -234,7 +234,7 @@ export function CampaignPage() {
                       value={campaign.status || "draft"}
                       options={statusOptions}
                       onChange={(v) => {
-                        createOrUpdateMutation.mutateAsync({ id: campaign.id, name: campaign.name, status: v, campaignType: campaign.campaignType }).then(() => {
+                        createOrUpdateMutation.mutateAsync({ id: campaign.id, name: campaign.name || "", status: v, campaignType: campaign.campaignType || "outbound" }).then(() => {
                           success("Status updated", `Status changed to "${v}"`);
                         });
                       }}

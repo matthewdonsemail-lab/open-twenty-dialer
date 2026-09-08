@@ -9,6 +9,7 @@ export interface ToastItem {
   detailedMessage?: string;
   variant?: ToastVariant;
   duration?: number;
+  exiting?: boolean;
 }
 
 interface ToastContextValue {
@@ -70,7 +71,14 @@ const SingleToast = ({
     <div
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
-      className="relative w-[296px] overflow-hidden rounded-[6px] border border-[var(--ods-border,#e5e5ea)] dark:border-[#313136] bg-white/90 dark:bg-[#1d1d20]/90 backdrop-blur-md shadow-lg p-2.5 transition-all select-none animate-in fade-in slide-in-from-bottom-2 duration-200"
+      className={`relative w-[296px] overflow-hidden rounded-[6px] border border-[var(--ods-border,#e5e5ea)] dark:border-[#313136] bg-white/90 dark:bg-[#1d1d20]/90 backdrop-blur-md shadow-lg p-2.5 transition-all select-none ${
+        item.exiting ? '' : 'fade-in'
+      }`}
+      style={{
+        animation: item.exiting
+          ? 'fadeOutSlide 200ms ease-out forwards'
+          : 'fadeInSlide 200ms ease-out forwards',
+      }}
     >
       {/* Background progress track */}
       <div
@@ -108,7 +116,10 @@ export const ToastProvider = ({ children }: { children: React.ReactNode }) => {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
   const removeToast = useCallback((id: string) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
+    setToasts((prev) => prev.map((t) => t.id === id ? { ...t, exiting: true } : t));
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 200);
   }, []);
 
   const addToast = useCallback(

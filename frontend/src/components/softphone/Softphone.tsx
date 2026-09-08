@@ -10,7 +10,6 @@ import {
   RotateCcw,
   Check,
   Radio,
-  RadioOff,
 } from "lucide-react";
 import { getSipConfig, isSipConfigured, getSipDomain, getSipExtension } from "@/sip";
 import { Button } from "@/components/ui/Button";
@@ -303,43 +302,16 @@ export function Softphone({ lead, onCallEnd }: SoftphoneProps) {
       const inviter = new Inviter(userAgent, target, {
         sessionDescriptionHandlerOptions: {
           constraints: { audio: true, video: false },
-          /**
-           * Attach local media stream to the peer connection
-           */
-          middleware: {
-            createAnswer: (next: any) => {
-              return async (desc: any, options: any) => {
-                const answer = await next(desc, options);
-                if (localStreamRef.current) {
-                  localStreamRef.current.getAudioTracks().forEach(track => {
-                    answer.peerConnection.addTrack(track, localStreamRef.current!);
-                  });
-                }
-                return answer;
-              };
-            },
-            createOffer: (next: any) => {
-              return async (desc: any, options: any) => {
-                const offer = await next(desc, options);
-                if (localStreamRef.current) {
-                  localStreamRef.current.getAudioTracks().forEach(track => {
-                    offer.peerConnection.addTrack(track, localStreamRef.current!);
-                  });
-                }
-                return offer;
-              };
-            },
-          },
         },
         extraHeaders,
-      });
+      } as any);
 
       sessionRef.current = inviter;
 
       /**
        * Handle incoming tracks from remote party
        */
-      inviter.sessionDescriptionHandler?.peerConnection.addEventListener("track", (event: any) => {
+      (inviter.sessionDescriptionHandler as any)?.peerConnection?.addEventListener("track", (event: any) => {
         console.log("Remote track received:", event.track.id);
         if (event.track.kind === "audio" && remoteAudioRef.current) {
           remoteAudioRef.current.srcObject = event.streams[0];
@@ -406,16 +378,14 @@ export function Softphone({ lead, onCallEnd }: SoftphoneProps) {
   }, [stopRecording, stopLocalStream]);
 
   const toggleMute = useCallback(() => {
-    if (callState === "active") {
-      const isCurrentlyMuted = callState === "muted";
-      setCallState(isCurrentlyMuted ? "active" : "muted");
+    const isCurrentlyMuted = callState === "muted";
+    setCallState(isCurrentlyMuted ? "active" : "muted");
 
-      // Toggle actual microphone
-      if (localStreamRef.current) {
-        localStreamRef.current.getAudioTracks().forEach(track => {
-          track.enabled = !isCurrentlyMuted;
-        });
-      }
+    // Toggle actual microphone
+    if (localStreamRef.current) {
+      localStreamRef.current.getAudioTracks().forEach(track => {
+        track.enabled = !isCurrentlyMuted;
+      });
     }
   }, [callState]);
 

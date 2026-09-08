@@ -15,7 +15,7 @@ interface Campaign {
 }
 
 interface CampaignSelectProps {
-  campaigns: Campaign[];
+  campaigns?: Campaign[];
   value?: string | null;
   onChange: (campaignId: string | null) => void;
 }
