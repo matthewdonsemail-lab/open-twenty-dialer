@@ -78,14 +78,93 @@ flowchart TB
 ```
 User Action (Prospect/Lead/Campaign)
          ↓
-   Frontend React UI
+    Frontend React UI
          ↓
-   REST API (Express)
+    REST API (Express)
          ↓
-   Twenty Client
+    Twenty Client
          ↓
-   Twenty CRM (REST API)
+    Twenty CRM (REST API)
 ```
+
+---
+
+## Isolated Workspaces via Railcode
+
+### What Railcode is
+
+Railcode (https://railcode.dev) is a secure cloud for **internal software**:
+every app is a static frontend plus a backend worker deployed and versioned
+as one unit, and every viewer must be a signed-in org member — no anonymous
+access, no public endpoints. The worker (not the browser) holds authority:
+it sees a verified caller (`ctx.user`), keeps per-app secrets, and reaches
+the outside world through declared `egress` hosts or org **connectors**.
+Cron, KV/file stores, LLM gateway, and email are platform primitives the
+worker calls with `@railcode/sdk`.
+
+### How we've implemented it here
+
+`cold-dialer/` is a Railcode apps-v2 app (`hono+vite`) — the isolated,
+always-on workspace for this repo. Live (private, owner-only):
+`https://cold-dialer.listeningkit.railcode.app/`, embedded in the Twenty
+dashboard as an iframe widget.
+
+```mermaid
+flowchart LR
+    Browser["Browser (org member)"]
+    App["Railcode app<br/>static frontend + Hono worker"]
+    Conn["org connector 'twenty'<br/>HTTP + bearer"]
+    Twenty["Twenty CRM<br/>REST"]
+    Dash["Twenty dashboard<br/>iframe widget"]
+
+    Browser --> App
+    App -->|"connector('twenty').fetch()"| Conn
+    Conn --> Twenty
+    Dash -.->|"embeds /dashboard?embed=1"| App
+```
+
+- **Twenty access goes through the org `twenty` HTTP connector**
+  (`connectors: { twenty: ["*"] }` in `manifest.yaml`, `run_as: app`).
+  The worker holds no API key. Critical detail: the connector's base URL
+  already ends in `/rest`, so worker paths must NOT add the prefix
+  (`/metadata/objects`, never `/rest/metadata/objects` — the doubled path
+  400s). See `server/lib/twenty.ts`.
+- **Auth is the platform session.** The old JWT/password flow is gone:
+  `GET /api/auth/me` returns `ctx.user`; the frontend signs in via the org.
+- **Listing the whole collection.** This Twenty version ignores cursor
+  params (`startingAfter`/`offset`/`page` all return page 1) and caps pages
+  at 200 records. The worker therefore walks `id` strictly ascending
+  (`orderBy=id[AscNullsFirst]` + `filter=id[gt]:<last id>`, 200/page,
+  bounded) and returns full arrays — the client never paginates. Verified:
+  741/741 prospects, zero dupes. See `listTwentyPage()` in
+  `server/lib/twenty.ts`.
+- **Twenty-grade tables.** Headers reorder with dnd-kit sortable locked to
+  the x-axis (Name pinned first, 6px drag activation so clicks keep
+  working), drop commits on release with a blue insertion edge and a
+  floating overlay, and persist per page. Edge resize handles mutate
+  `--col-<key>` CSS variables on the `<table>` directly — zero React
+  re-renders mid-drag, 80px min width, persisted on pointer-up. Status
+  filtering uses a floating Twenty-style panel (search + dot/check rows),
+  not a native select.
+- **Styling gotcha (fixed, documented so it stays fixed).** Tailwind
+  resolves `content` globs and its config relative to the **process cwd**
+  (the app root), not the Vite root — so `tailwind.config.js` lives at
+  `cold-dialer/tailwind.config.js` with `./frontend/...` globs. With the
+  config inside `frontend/`, Tailwind silently emitted preflight only
+  (6.8KB, zero utilities).
+
+```bash
+cd cold-dialer
+npm install
+railcode dev --port 5235      # local frontend + worker
+railcode manifest validate
+railcode deploy --private     # railcode apps set-access to open to the org
+railcode logs app --app cold-dialer   # worker invocations
+```
+
+What stays off Railcode: the node01 Express backend (`backend/`, local/dev
+use) and anything anonymous — Railcode cannot serve public traffic, so
+public funnels live elsewhere (e.g. Vercel).
 
 ---
 
