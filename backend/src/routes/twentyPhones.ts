@@ -12,11 +12,16 @@ interface AgencyPhone {
   id: string;
   name?: string;
   phoneNumber?: string;
-  provider?: string;
-  city?: string;
+  countryCode?: string;
+  numberType?: string;
   state?: string;
-  country?: string;
-  status?: string;
+  messagingProfileId?: string;
+  tenDlcCampaignId?: string;
+  tollFreeVerificationId?: string;
+  lastSyncedAt?: string;
+  eligibleProducts?: unknown;
+  features?: unknown;
+  health?: unknown;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -31,12 +36,24 @@ router.get("/", async (_req, res) => {
 
     const mapped = phones.map((phone) => ({
       id: phone.id,
+      name: phone.name,
       phoneNumber: phone.phoneNumber || phone.name || "—",
-      provider: phone.provider || "Unknown",
-      city: phone.city || "—",
-      state: phone.state || "—",
-      country: phone.country || "—",
-      status: phone.status || "active",
+      // Live Twenty shape (see SendWebsiteWidget_plan.md §1.4)
+      countryCode: phone.countryCode || null,
+      numberType: phone.numberType || null,
+      state: phone.state || null,
+      messagingProfileId: phone.messagingProfileId || null,
+      tenDlcCampaignId: phone.tenDlcCampaignId || null,
+      tollFreeVerificationId: phone.tollFreeVerificationId || null,
+      lastSyncedAt: phone.lastSyncedAt || null,
+      eligibleProducts: phone.eligibleProducts ?? null,
+      features: phone.features ?? null,
+      health: phone.health ?? null,
+      // Back-compat aliases for existing UI (PhoneNumbersPage, widget selector)
+      provider: phone.numberType || "Unknown",
+      city: "—",
+      country: phone.countryCode || "—",
+      status: (phone.state || "active").toLowerCase(),
       created_at: phone.createdAt || new Date().toISOString(),
       updated_at: phone.updatedAt || new Date().toISOString(),
     }));

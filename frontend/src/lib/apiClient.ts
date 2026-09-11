@@ -84,6 +84,60 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ rows }),
       }),
+    websiteStatus: (id: string) =>
+      request<{
+        prospect: {
+          id: string;
+          slug?: string;
+          niche?: string;
+          label?: string;
+          labelValue?: string;
+          website?: string;
+          phone?: string;
+          phoneE164?: string;
+          country?: string;
+          city?: string;
+          region?: string;
+          videoStatus?: string;
+          videoSource?: string;
+          videoError?: string;
+          videoUrl?: { primaryLinkUrl?: string; primaryLinkLabel?: string } | null;
+          outboundState?: string;
+          outboundLabel?: string;
+          smsMetadata?: unknown;
+          whatsappStatus?: string;
+        };
+        offer: {
+          id: string;
+          title?: string;
+          heroH1?: string;
+          status?: string;
+          ctaType?: string;
+          videoMode?: string;
+          industryId?: string;
+          videoUrl?: { primaryLinkUrl?: string; primaryLinkLabel?: string } | null;
+        } | null;
+        urls: {
+          industryId: string;
+          industryKey: string;
+          pack: string;
+          slug: string;
+          offerDisplayUrl: string | null;
+          funnelSrc: string;
+          templateUrl: string | null;
+          templateAvailable: boolean;
+        };
+      }>(`/api/prospects/${id}/website-status`),
+    logWebsiteSent: (id: string, data: { templateUrl?: string; offerUrl?: string; fromNumber?: string; body?: string }) =>
+      request<{ success: boolean; sentAt: string; outboundLabel: string | null }>(
+        `/api/prospects/${id}/website-sent`,
+        { method: "POST", body: JSON.stringify(data) },
+      ),
+    ensureOffer: (id: string) =>
+      request<{ action: "existing" | "created"; industryKey: string; offer: any }>(
+        `/api/prospects/${id}/ensure-offer`,
+        { method: "POST" },
+      ),
   },
 
   campaigns: {

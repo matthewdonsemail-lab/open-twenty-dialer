@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/apiClient";
 import { Softphone } from "@/components/softphone/Softphone";
 import { CallScriptWidget } from "@/components/scripts/CallScriptWidget";
+import { SendWebsiteWidget } from "@/components/website/SendWebsiteWidget";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { StatusSelect } from "@/components/common/StatusSelect";
 import { mapLeadProspectStatusOptions } from "@/lib/twentyOptions";
@@ -38,6 +39,21 @@ interface Prospect {
   sync_id?: string;
   created_at?: string;
   updated_at?: string;
+  // Industry / niche (live Twenty shape, see SendWebsiteWidget_plan.md §1.1)
+  slug?: string;
+  niche?: string;
+  label?: string;
+  labelValue?: string;
+  country?: string;
+  rating?: number;
+  reviewCount?: number;
+  // Messaging + video pipeline
+  outboundState?: string;
+  outboundLabel?: string;
+  videoStatus?: string;
+  videoSource?: string;
+  videoError?: string;
+  videoUrl?: { primaryLinkUrl?: string; primaryLinkLabel?: string } | null;
 }
 
 export function ProspectDetailPage() {
@@ -48,6 +64,7 @@ export function ProspectDetailPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [editingData, setEditingData] = useState<Partial<Prospect>>({});
+  const [agencyFromNumber, setAgencyFromNumber] = useState("");
 
   // Fetch campaigns to resolve campaign_id to name
   const { data: campaigns } = useQuery({
@@ -197,7 +214,7 @@ export function ProspectDetailPage() {
       <div className="flex flex-col gap-[var(--ods-sp-6)]">
         {/* Main Dialing Row: Softphone + Call Script + Prospect Details */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-[var(--ods-sp-6)] items-start">
-          <Softphone lead={prospect as any} onCallEnd={handleCallEnd} />
+          <Softphone lead={prospect as any} callerId={agencyFromNumber || undefined} onCallEnd={handleCallEnd} />
           <CallScriptWidget campaignId={prospect?.campaign_id ?? null} />
           <WidgetCard title="Prospect Details" className="h-[460px]">
             <div className="flex flex-col gap-[var(--ods-sp-4)] h-full overflow-y-auto pr-1">
@@ -211,6 +228,20 @@ export function ProspectDetailPage() {
                   options={statusOptions}
                   onChange={handleStatusChange}
                 />
+              </div>
+
+              {/* Qualification */}
+              <div>
+                <dt className="text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-tertiary)] mb-2">
+                  Qualification
+                </dt>
+                {(prospect as any).qualificationStatus ? (
+                  <Badge variant={(prospect as any).qualificationStatus === 'QUALIFIED' ? 'green' : (prospect as any).qualificationStatus === 'DISQUALIFIED' ? 'rose' : 'gray'}>
+                    {(prospect as any).qualificationStatus}
+                  </Badge>
+                ) : (
+                  <span className="text-[11px] text-[var(--ods-text-tertiary)]">—</span>
+                )}
               </div>
 
               {/* Industry Badge */}
@@ -253,6 +284,13 @@ export function ProspectDetailPage() {
             </div>
           </WidgetCard>
         </div>
+
+        {/* Send Website Row: video status + template/offer links + SMS composer */}
+        <SendWebsiteWidget
+          prospect={prospect}
+          fromNumber={agencyFromNumber}
+          onFromChange={setAgencyFromNumber}
+        />
 
         {/* Bottom Row: Notes | Contact Info */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-[var(--ods-sp-6)]">

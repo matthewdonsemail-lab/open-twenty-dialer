@@ -20,6 +20,7 @@ type Lead = Database["public"]["Tables"]["leads"]["Row"];
 
 interface SoftphoneProps {
   lead: Lead | null;
+  callerId?: string;
   onCallEnd?: (outcome: {
     outcome: string;
     duration: number;
@@ -34,7 +35,7 @@ type CallState = "idle" | "connecting" | "ringing" | "active" | "on_hold" | "mut
 const FOCUS_RING =
   "focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ods-brand-500)] focus-visible:outline-offset-1";
 
-export function Softphone({ lead, onCallEnd }: SoftphoneProps) {
+export function Softphone({ lead, callerId, onCallEnd }: SoftphoneProps) {
   const [callState, setCallState] = useState<CallState>("idle");
   const [duration, setDuration] = useState(0);
   const [notes, setNotes] = useState("");
@@ -260,13 +261,14 @@ export function Softphone({ lead, onCallEnd }: SoftphoneProps) {
       }
 
       const extraHeaders: string[] = [];
-      if (sipConfig.callerId) {
-        extraHeaders.push(`P-Asserted-Identity: <sip:${sipConfig.callerId}@${domain}>`);
+      const effectiveCallerId = callerId || sipConfig.callerId;
+      if (effectiveCallerId) {
+        extraHeaders.push(`P-Asserted-Identity: <sip:${effectiveCallerId}@${domain}>`);
       }
 
       const userAgent = new UserAgent({
         uri: UserAgent.makeURI(sipConfig.uri),
-        displayName: sipConfig.callerId || undefined,
+        displayName: effectiveCallerId || undefined,
         transportOptions: {
           server: sipConfig.wsUrl || `wss://${domain}:5066`,
         },
@@ -344,7 +346,7 @@ export function Softphone({ lead, onCallEnd }: SoftphoneProps) {
       console.warn("SIP.js call failed, using simulated call:", err);
       startSimulatedCall();
     }
-  }, [phoneNumber, startSimulatedCall, getLocalStream]);
+  }, [phoneNumber, callerId, startSimulatedCall, getLocalStream]);
 
   const endCall = useCallback(async () => {
     // Stop recording if active

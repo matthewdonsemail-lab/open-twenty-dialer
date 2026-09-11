@@ -24,23 +24,90 @@ interface AgencyProspect {
   name?: string;
   slug?: string;
   phone?: string;
+  phoneNumber?: { primaryPhoneNumber?: string; primaryPhoneCountryCode?: string; primaryPhoneCallingCode?: string; additionalPhones?: unknown[] } | string;
+  primaryPhone?: { primaryPhoneNumber?: string; primaryPhoneCountryCode?: string; primaryPhoneCallingCode?: string; additionalPhones?: unknown[] } | string;
+  phoneValid?: boolean;
   fullAddress?: string;
   city?: string;
   region?: string;
   country?: string;
   niche?: string;
+  label?: string | { value?: string; label?: string };
   website?: string;
   rating?: number;
   reviewCount?: number;
   email?: string;
   externalId?: string;
-  outboundState?: string;
-  outboundLabel?: string;
+  outboundState?: string | { value?: string; label?: string };
+  outboundLabel?: string | { value?: string; label?: string };
+  smsMetadata?: unknown;
+  videoStatus?: string | { value?: string; label?: string };
+  videoSource?: string;
+  videoError?: string;
+  videoUrl?: { primaryLinkUrl?: string; primaryLinkLabel?: string; secondaryLinks?: unknown[] };
+  whatsappStatus?: string | { value?: string; label?: string };
+  whatsappValidated?: boolean;
+  ghlWebhookUrl?: string;
+  googleReviewsUrl?: string;
   coldCallStatus?: string;
   utmSource?: string;
   campaignIdId?: string; // Relation to agencyCampaign
   createdAt?: string;
   updatedAt?: string;
+}
+
+// Twenty SELECT fields may arrive as a plain string value or as { value, label }.
+function selectValue(v: unknown): string | undefined {
+  if (typeof v === "string") return v || undefined;
+  if (v && typeof v === "object") {
+    const o = v as { value?: unknown; label?: unknown };
+    if (typeof o.value === "string" && o.value) return o.value;
+    if (typeof o.label === "string" && o.label) return o.label;
+  }
+  return undefined;
+}
+
+function slugifyIndustryValue(niche: string): string {
+  // Display-only fallback for the label badge when a prospect has no label.
+  const value = niche.trim().toUpperCase()
+    .replace(/&/g, " AND ")
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .replace(/_{2,}/g, "_");
+  return value.length > 0 ? value : "UNLABELED";
+}
+
+/**
+ * Industry routing read from the agencyCampaign row — the only source of
+ * urlKey/funnel/template bases. Linked campaign first, else the campaign
+ * whose industryId matches the prospect label. Null = unconfigured
+ * (callers surface explicit states, never invented defaults).
+ */
+async function resolveIndustryRouting(prospect: AgencyProspect): Promise<{
+  urlKey: string; funnelBaseUrl?: string; templateBaseUrl?: string; packDir?: string;
+} | null> {
+  const linked: any = (prospect as any).campaignId ?? (prospect as any).campaignIdId;
+  const linkedId = typeof linked === "string" ? linked : linked?.id;
+  if (linkedId) {
+    try {
+      const campaign: any = await getTwenty<any>('agencyCampaigns', linkedId);
+      if (campaign?.urlKey) return campaign;
+    } catch {
+      // fall through to industryId filter
+    }
+  }
+  const label = selectValue(prospect.label);
+  if (!label) return null;
+  try {
+    const campaigns = await listTwenty<any>('agencyCampaigns', {
+      limit: 1,
+      filter: `industryId[eq]:${label}`,
+    } as any);
+    if (campaigns[0]?.urlKey) return campaigns[0];
+  } catch (err: any) {
+    log.info(`Campaign routing lookup failed: ${(err as any)?.message}`);
+  }
+  return null;
 }
 
 interface AgencyCampaign {
@@ -81,6 +148,9 @@ router.get("/", async (_req, res) => {
         ? STATUS_MAP[prospect.coldCallStatus] || "new"
         : "new";
 
+      const labelValue = selectValue(prospect.label);
+      const outboundState = selectValue(prospect.outboundState);
+
       return {
         id: prospect.id,
         first_name: firstName,
@@ -95,6 +165,30 @@ router.get("/", async (_req, res) => {
         zip,
         status,
         source: prospect.niche || "twenty-import",
+        // Industry / niche (live Twenty shape)
+        slug: prospect.slug,
+        niche: prospect.niche,
+        label: labelValue,
+        labelValue,
+        country: prospect.country,
+        rating: prospect.rating,
+        reviewCount: prospect.reviewCount,
+        // Messaging shape (SMS pipeline + WhatsApp)
+        outboundState,
+        outboundLabel: selectValue(prospect.outboundLabel),
+        smsMetadata: prospect.smsMetadata ?? null,
+        phoneValid: prospect.phoneValid ?? null,
+        whatsappStatus: selectValue(prospect.whatsappStatus),
+        whatsappValidated: prospect.whatsappValidated ?? null,
+        phoneNumber: prospect.phoneNumber ?? null,
+        primaryPhone: prospect.primaryPhone ?? null,
+        ghlWebhookUrl: prospect.ghlWebhookUrl,
+        googleReviewsUrl: prospect.googleReviewsUrl,
+        // Video pipeline
+        videoStatus: selectValue(prospect.videoStatus),
+        videoSource: prospect.videoSource,
+        videoError: prospect.videoError,
+        videoUrl: prospect.videoUrl ?? null,
         campaign_id: prospect.campaignIdId || undefined,
         campaign_type: prospect.utmSource ? (prospect.utmSource === 'outbound' ? 'outbound' : prospect.utmSource === 'inbound' ? 'inbound' : 'blended') : undefined,
         assigned_to: undefined,
@@ -150,6 +244,30 @@ router.get("/:id", async (req, res) => {
       zip: addressParts[3],
       status,
       source: prospect.niche || "twenty-import",
+      // Industry / niche (live Twenty shape)
+      slug: prospect.slug,
+      niche: prospect.niche,
+      label: selectValue(prospect.label),
+      labelValue: selectValue(prospect.label),
+      country: prospect.country,
+      rating: prospect.rating,
+      reviewCount: prospect.reviewCount,
+      // Messaging shape (SMS pipeline + WhatsApp)
+      outboundState: selectValue(prospect.outboundState),
+      outboundLabel: selectValue(prospect.outboundLabel),
+      smsMetadata: prospect.smsMetadata ?? null,
+      phoneValid: prospect.phoneValid ?? null,
+      whatsappStatus: selectValue(prospect.whatsappStatus),
+      whatsappValidated: prospect.whatsappValidated ?? null,
+      phoneNumber: prospect.phoneNumber ?? null,
+      primaryPhone: prospect.primaryPhone ?? null,
+      ghlWebhookUrl: prospect.ghlWebhookUrl,
+      googleReviewsUrl: prospect.googleReviewsUrl,
+      // Video pipeline
+      videoStatus: selectValue(prospect.videoStatus),
+      videoSource: prospect.videoSource,
+      videoError: prospect.videoError,
+      videoUrl: prospect.videoUrl ?? null,
       campaign_id: prospect.campaignIdId || undefined,
       campaign_type: prospect.utmSource ? (prospect.utmSource === 'outbound' ? 'outbound' : prospect.utmSource === 'inbound' ? 'inbound' : 'blended') : undefined,
       tags: prospect.outboundState ? [prospect.outboundState] : null,
@@ -342,6 +460,211 @@ router.delete("/:id", async (req, res) => {
   } catch (err: any) {
     log.error(`Failed to delete prospect ${req.params.id}:`, err.message);
     res.status(500).json({ error: "Failed to delete prospect from Twenty", details: err.message });
+  }
+});
+
+/**
+ * GET /api/prospects/:id/website-status
+ * Server-side aggregation for SendWebsiteWidget (Twenty key never leaves backend):
+ * prospect messaging/video block + INDUSTRY agencyOffer + computed template/offer URLs.
+ * Offer is industry-only (name == INDUSTRY:{urlKey}); industry routing (urlKey,
+ * funnel/template bases, pack) is read from the agencyCampaign row — never
+ * hardcoded, never defaulted. Missing rows surface as explicit nulls.
+ */
+router.get("/:id/website-status", async (req, res) => {
+  try {
+    const id = req.params.id as string;
+    const prospect = await getTwenty<AgencyProspect>('agencyProspects', id);
+
+    // Industry routing from the campaign row: linked campaign first, else the
+    // campaign whose industryId matches the prospect label.
+    const routing = await resolveIndustryRouting(prospect);
+    const industryKey = routing?.urlKey || null;
+    const funnelBase = (routing?.funnelBaseUrl || "").replace(/\/$/, "");
+    const templateBase = (routing?.templateBaseUrl || "").replace(/\/$/, "");
+    const pack = routing?.packDir || null;
+
+    // Offer lookup: the INDUSTRY row, never the per-prospect row.
+    let offer: any = null;
+    if (industryKey) {
+      try {
+        const offers = await listTwenty<any>('agencyOffers', {
+          limit: 1,
+          filter: `name[eq]:INDUSTRY:${industryKey}`,
+        } as any);
+        offer = offers[0] ?? null;
+      } catch (err: any) {
+        log.info(`No industry offer INDUSTRY:${industryKey} for prospect ${id}: ${err.message}`);
+      }
+    }
+
+    // Effective video: industry CUSTOM override wins, else the prospect video.
+    const prospectVideoUrl =
+      typeof prospect.videoUrl === "string"
+        ? prospect.videoUrl
+        : (prospect.videoUrl as any)?.primaryLinkUrl || undefined;
+    const offerMode = String(offer?.videoMode || "PROSPECT").toUpperCase();
+    const overrideUrl =
+      typeof offer?.videoUrl === "string"
+        ? offer.videoUrl
+        : offer?.videoUrl?.primaryLinkUrl || undefined;
+    const effectiveVideoUrl =
+      offerMode === "CUSTOM" && overrideUrl ? overrideUrl : prospectVideoUrl;
+
+    // Canonical phone: PHONES composite first, legacy TEXT fallback.
+    const phoneE164 =
+      (prospect.phoneNumber as any)?.primaryPhoneNumber ||
+      (prospect.primaryPhone as any)?.primaryPhoneNumber ||
+      prospect.phone;
+
+    // Absolute "website we built" URL: phi /offer/:industry/:slug lineup
+    // (same slug as the funnel). Null when unconfigured — never invented.
+    // No trailing slash (the Vercel rewrites match slash-less paths).
+    const niche = prospect.niche || "";
+    const labelValue = selectValue(prospect.label) || (niche ? slugifyIndustryValue(niche) : "UNLABELED");
+    const slug = prospect.slug || "";
+    const prospectId = prospect.id;
+    const templateKey = slug || prospectId;
+    const templateUrl = industryKey && templateBase ? `${templateBase}/offer/${industryKey}/${templateKey}` : null;
+    const funnelSrc = funnelBase ? `${funnelBase}/offer/prospect/${prospectId}` : null;
+
+    res.json({
+      prospect: {
+        id: prospectId,
+        slug,
+        niche,
+        label: selectValue(prospect.label),
+        labelValue,
+        website: prospect.website,
+        phone: prospect.phone,
+        phoneE164,
+        country: prospect.country,
+        city: prospect.city,
+        region: prospect.region,
+        videoStatus: selectValue(prospect.videoStatus),
+        videoSource: prospect.videoSource,
+        videoError: prospect.videoError,
+        videoUrl: prospect.videoUrl ?? null,
+        outboundState: selectValue(prospect.outboundState),
+        outboundLabel: selectValue(prospect.outboundLabel),
+        smsMetadata: prospect.smsMetadata ?? null,
+        whatsappStatus: selectValue(prospect.whatsappStatus),
+      },
+      offer: offer ? {
+        id: offer.id,
+        title: offer.title,
+        heroH1: offer.heroH1,
+        status: offer.status,
+        ctaType: offer.ctaType,
+        videoMode: offer.videoMode,
+        industryId: offer.industryId,
+        videoUrl: effectiveVideoUrl ? { primaryLinkUrl: effectiveVideoUrl } : (offer.videoUrl ?? null),
+      } : null,
+      urls: {
+        industryKey,
+        pack,
+        slug,
+        // Cosmetic display URL (industry + slug); the funnel resolves by prospect ID
+        offerDisplayUrl: industryKey && slug ? `/offer/${industryKey}/${slug}` : null,
+        funnelSrc,
+        templateUrl,
+        templateAvailable: templateUrl !== null,
+      },
+    });
+  } catch (err: any) {
+    log.error(`Failed to get website-status for ${req.params.id}:`, err.message);
+    res.status(404).json({ error: "Prospect not found" });
+  }
+});
+
+/**
+ * POST /api/prospects/:id/website-sent
+ * Day-1 sent log (no Telnyx key needed): stamps outboundLabel -> SMS_IN_PROGRESS
+ * when the current label is a pre-send state, and echoes the payload for the UI.
+ */
+router.post("/:id/website-sent", async (req: AuthRequest, res) => {
+  try {
+    const id = req.params.id as string;
+    const { templateUrl, offerUrl, fromNumber, body } = req.body ?? {};
+    const sentAt = new Date().toISOString();
+
+    let advancedLabel: string | null = null;
+    try {
+      const current = await getTwenty<AgencyProspect>('agencyProspects', id);
+      const currentLabel = selectValue(current.outboundLabel);
+      if (!currentLabel || ["NEEDS_ENRICHMENT", "NEEDS_VIDEO", "READY_FOR_SMS"].includes(currentLabel)) {
+        await updateTwenty('agencyProspects', id, { outboundLabel: "SMS_IN_PROGRESS" });
+        advancedLabel = "SMS_IN_PROGRESS";
+      }
+    } catch (err: any) {
+      log.info(`website-sent label advance skipped for ${id}: ${err.message}`);
+    }
+
+    log.info(`Website sent logged for prospect ${id} from ${fromNumber || "unknown"}`);
+    res.json({
+      success: true,
+      prospectId: id,
+      sentAt,
+      templateUrl: templateUrl ?? null,
+      offerUrl: offerUrl ?? null,
+      fromNumber: fromNumber ?? null,
+      bodyPreview: typeof body === "string" ? body.slice(0, 280) : null,
+      outboundLabel: advancedLabel,
+    });
+  } catch (err: any) {
+    log.error(`Failed to log website-sent for ${req.params.id}:`, err.message);
+    res.status(500).json({ error: "Failed to log website sent", details: err.message });
+  }
+});
+
+/**
+ * POST /api/prospects/:id/ensure-offer
+ * Resolves the funnel 404 at the industry level: returns the INDUSTRY:{id}
+ * offer for the prospect's industry, or creates it (neutral copy, ACTIVE,
+ * videoMode=PROSPECT) so /offer/:industry/:slug + funnel links work immediately.
+ * Per-prospect rows are never created here.
+ */
+router.post("/:id/ensure-offer", async (req: AuthRequest, res) => {
+  try {
+    const id = req.params.id as string;
+    const prospect = await getTwenty<AgencyProspect>('agencyProspects', id);
+    const routing = await resolveIndustryRouting(prospect);
+    if (!routing?.urlKey) {
+      res.status(404).json({ error: "Industry not configured for prospect" });
+      return;
+    }
+    const industryKey = routing.urlKey;
+    const twentyValue = selectValue((routing as any).industryId) || selectValue(prospect.label) || "";
+    const rowName = `INDUSTRY:${industryKey}`;
+
+    const existing = await listTwenty<any>('agencyOffers', {
+      limit: 1,
+      filter: `name[eq]:${rowName}`,
+    } as any);
+    if (existing[0]) {
+      res.json({ action: "existing" as const, industryKey, offer: existing[0] });
+      return;
+    }
+
+    // Neutral seed copy only — the operator tailors it in the builder.
+    const created = await createTwenty<any>('agencyOffers', {
+      name: rowName,
+      title: `Free Consultation`,
+      heroH1: `Book Your Free Consultation`,
+      heroLede: {
+        blocknote: null,
+        markdown: `Answer a few quick questions and book your free consultation call.`,
+      },
+      status: "ACTIVE",
+      industryId: twentyValue || undefined,
+      videoMode: "PROSPECT",
+    });
+    const offer = (created as any).data || created;
+    log.info(`Created industry offer ${rowName} (${offer.id}) via prospect ${id}`);
+    res.status(201).json({ action: "created" as const, industryKey, offer });
+  } catch (err: any) {
+    log.error(`Failed to ensure offer for ${req.params.id}:`, err.message);
+    res.status(500).json({ error: "Failed to ensure offer", details: err.message });
   }
 });
 
