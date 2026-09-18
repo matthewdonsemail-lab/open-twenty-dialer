@@ -19,6 +19,9 @@ import type { Database } from "@/types/database";
 
 type Lead = Database["public"]["Tables"]["leads"]["Row"];
 
+// NOTE: SIP credentials (VITE_SIP_*) bake in at `vite build` time — a Vercel
+// redeploy without source changes may reuse a cached bundle with stale env.
+
 export interface CallMember {
   id: string;
   email: string;
