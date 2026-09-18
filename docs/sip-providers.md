@@ -29,7 +29,7 @@ VITE_SIP_CALLER_ID=+1XXXXXXXXXX
 ```env
 VITE_SIP_URI=sip:username@sip.telnyx.com
 VITE_SIP_PASSWORD=your-password
-VITE_SIP_WS_URL=wss://sip.telnyx.com:8443
+VITE_SIP_WS_URL=wss://sip.telnyx.com:7443
 VITE_SIP_CALLER_ID=+1XXXXXXXXXX
 ```
 
