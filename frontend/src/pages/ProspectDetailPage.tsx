@@ -70,11 +70,13 @@ export function ProspectDetailPage() {
   const { user } = useAuth();
   const member = user ? { id: user.twentyUserId ?? user.id, email: user.email } : null;
 
-  // Resolve the selected sending number to its agencyPhones row (for claiming)
+  // Resolve the selected sending number to its agencyPhones row (for claiming).
+  // Shared ["twentyPhones"] cache with the widget: holder state stays live.
   const { data: phones } = useQuery({
-    queryKey: ["twenty-phones"],
+    queryKey: ["twentyPhones"],
     queryFn: async () => api.twentyPhones.list(),
-    staleTime: 30000,
+    staleTime: 10_000,
+    refetchInterval: 15_000,
   });
   const activePhoneRow = (phones ?? []).find((p: any) => p.phoneNumber === agencyFromNumber) ?? null;
 

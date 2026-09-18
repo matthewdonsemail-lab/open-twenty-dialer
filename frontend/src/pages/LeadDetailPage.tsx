@@ -35,10 +35,12 @@ export function LeadDetailPage() {
   const recentCalls = useCallsForRecord({ leadId: leadId ?? null });
 
   // Default sending number for leads (first ACTIVE row; claim enforced server-side)
+  // Default sending number (shared ["twentyPhones"] cache: holder state stays live)
   const { data: phones } = useQuery({
-    queryKey: ["twenty-phones"],
+    queryKey: ["twentyPhones"],
     queryFn: async () => api.twentyPhones.list(),
-    staleTime: 30000,
+    staleTime: 10_000,
+    refetchInterval: 15_000,
   });
   const defaultPhoneRow =
     (phones ?? []).find((p: any) => p.state === "ACTIVE" && (p.callState || "IDLE") === "IDLE") ??

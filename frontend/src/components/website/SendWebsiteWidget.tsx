@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Globe, Video, Copy, ExternalLink, MessageSquare, AlertTriangle, Check, Ban } from "lucide-react";
+import { Globe, Video, Copy, ExternalLink, MessageSquare, AlertTriangle, Check, Ban, Lock } from "lucide-react";
 import { api } from "@/lib/apiClient";
+import { useAuth } from "@/components/auth/AuthProvider";
 import { WidgetCard } from "@/components/ui/WidgetCard";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -25,6 +26,12 @@ interface AgencyPhoneRow {
   numberType?: string | null;
   state?: string | null;
   messagingProfileId?: string | null;
+  // Live claim state (single holder per number, synced from Twenty)
+  callState?: string | null;
+  claimedByMemberId?: string | null;
+  claimedByEmail?: string | null;
+  claimedAt?: string | null;
+  currentCallId?: string | null;
   // back-compat aliases from backend
   provider?: string;
   country?: string;
@@ -97,22 +104,44 @@ export function SendWebsiteWidget({ prospect, fromNumber, onFromChange }: SendWe
   const { data: phones } = useQuery<AgencyPhoneRow[]>({
     queryKey: ["twentyPhones"],
     queryFn: () => api.twentyPhones.list(),
-    staleTime: Infinity,
+    // Claim state is live: another member grabbing a number must show up here
+    staleTime: 10_000,
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: true,
   });
 
+  const { user } = useAuth();
+  const myMemberId = user ? user.twentyUserId ?? user.id : null;
+
+  const heldByOther = (row: AgencyPhoneRow) =>
+    (row.callState || "IDLE") !== "IDLE" &&
+    !!row.claimedByMemberId &&
+    row.claimedByMemberId !== myMemberId;
+  const heldByMe = (row: AgencyPhoneRow) =>
+    (row.callState || "IDLE") !== "IDLE" &&
+    !!row.claimedByMemberId &&
+    row.claimedByMemberId === myMemberId;
+
   const activePhones = useMemo(() => (phones || []).filter(isActiveRow), [phones]);
+  const freePhones = useMemo(() => activePhones.filter((p) => !heldByOther(p)), [activePhones, myMemberId]);
 
   const inferred = useMemo(
     () => inferProspectCountry(status?.prospect.phone ?? prospect.phone, status?.prospect.country ?? prospect.country),
     [status, prospect.phone, prospect.country],
   );
 
-  // Default From-number: match prospect country, else first active
+  // Default From-number: free number matching prospect country, else first free.
+  // If the selected number gets claimed by someone else, fall over to a free one.
   useEffect(() => {
-    if (selectedId || activePhones.length === 0) return;
-    const match = inferred ? activePhones.find((p) => phoneCountry(p) === inferred) : undefined;
-    setSelectedId((match ?? activePhones[0])!.id);
-  }, [activePhones, inferred, selectedId]);
+    if (activePhones.length === 0) return;
+    const current = selectedId ? activePhones.find((p) => p.id === selectedId) : undefined;
+    if (current && !heldByOther(current)) return;
+    const pool = freePhones.length > 0 ? freePhones : activePhones;
+    const match = inferred ? pool.find((p) => phoneCountry(p) === inferred) : undefined;
+    const next = match ?? pool[0];
+    if (next && next.id !== selectedId) setSelectedId(next.id);
+    else if (!selectedId && activePhones.length > 0 && !next) setSelectedId(activePhones[0].id);
+  }, [activePhones, freePhones, inferred, selectedId]);
 
   const selected = useMemo(
     () => activePhones.find((p) => p.id === selectedId) ?? null,
@@ -238,12 +267,34 @@ export function SendWebsiteWidget({ prospect, fromNumber, onFromChange }: SendWe
                 onChange={(e) => setSelectedId(e.target.value)}
                 className="w-full px-3 py-1.5 text-[12px] border border-[var(--ods-border)] rounded-[4px] bg-[var(--ods-bg-primary)] text-[var(--ods-text-primary)] outline-none focus:border-[var(--ods-brand-500)] cursor-pointer"
               >
-                {activePhones.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.phoneNumber} ({phoneCountry(p) || "?"} · {p.numberType || p.provider || "?"})
-                  </option>
-                ))}
+                {activePhones.map((p) => {
+                  const other = heldByOther(p);
+                  const mine = heldByMe(p);
+                  const suffix = other
+                    ? ` · 🔒 ${p.claimedByEmail || "in use"}`
+                    : mine
+                      ? " · in use by you"
+                      : "";
+                  return (
+                    <option key={p.id} value={p.id} disabled={other}>
+                      {p.phoneNumber} ({phoneCountry(p) || "?"} · {p.numberType || p.provider || "?"}){suffix}
+                    </option>
+                  );
+                })}
               </select>
+            )}
+            {selected && heldByOther(selected) && (
+              <div className="flex items-start gap-2 mt-2 p-2.5 bg-amber-500/10 border border-amber-500/20 rounded-[6px] text-[12px] text-amber-700">
+                <Lock className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>
+                  {selected.phoneNumber} is on a call with {selected.claimedByEmail || "another member"} — pick a free number or wait for release.
+                </span>
+              </div>
+            )}
+            {selected && heldByMe(selected) && (
+              <p className="text-[11px] text-[var(--ods-text-tertiary)] mt-1.5">
+                You're holding {selected.phoneNumber} for this call ✓
+              </p>
             )}
             {mismatch && selected && (
               <div className="flex items-start gap-2 mt-2 p-2.5 bg-red-500/10 border border-red-500/20 rounded-[6px] text-[12px] text-red-600">
