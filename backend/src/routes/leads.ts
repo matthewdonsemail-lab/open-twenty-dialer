@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { authMiddleware, AuthRequest } from "../middleware/auth.js";
-import { listTwenty, createTwenty, updateTwenty, deleteTwenty, getTwenty } from "../lib/twenty-client.js";
+import { listTwenty, listTwentyAll, createTwenty, updateTwenty, deleteTwenty, getTwenty } from "../lib/twenty-client.js";
 import { createLogger } from "../lib/logger.js";
 
 const router = Router();
@@ -49,7 +49,7 @@ interface AgencyLead {
 router.get("/", async (_req, res) => {
   try {
     log.info('Listing leads from Twenty CRM');
-    const leads = await listTwenty<AgencyLead>('agencyLeads', 200);
+    const leads = await listTwentyAll<AgencyLead>('agencyLeads');
 
     // Fetch campaigns to resolve campaign types
     let campaignMap: Record<string, string> = {};

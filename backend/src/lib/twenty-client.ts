@@ -193,9 +193,7 @@ export function unwrapTwentyItem<T>(payload: any, path: string): T {
 export async function fetchTwenty<T>(path: string, options?: TwentyQueryOptions): Promise<T> {
   const cfg = getConfig();
   const cleanPath = path.startsWith("/") ? path.slice(1) : path;
-  const basePath = cleanPath.startsWith("metadata") || cleanPath.startsWith("graphql")
-    ? cleanPath
-    : `rest/${cleanPath}`;
+  const basePath = `rest/${cleanPath}`;
 
   const url = new URL(`${cfg.twentyBaseUrl}/${basePath}`);
 
@@ -456,6 +454,82 @@ export async function listTwenty<T = TwentyRecord>(path: string, limitOrOptions:
   return records;
 }
 
+export interface TwentyPage<T = TwentyRecord> {
+  records: T[];
+  pageInfo: { hasNextPage: boolean; endCursor: string | null };
+  totalCount: number;
+}
+
+/**
+ * One keyset page from Twenty REST.
+ *
+ * This Twenty version ignores cursor params (startingAfter/offset/page all
+ * return page 1) and caps limit at 200, so paging walks `id` strictly
+ * ascending: `orderBy=id[AscNullsFirst]` + `filter=id[gt]:<last seen id>`.
+ * IDs are unique, so pages are disjoint and the walk always terminates.
+ * `startingAfter` here is the last-seen record id (not a Twenty cursor).
+ */
+export async function listTwentyPage<T = TwentyRecord>(
+  path: string,
+  options: { limit?: number; filter?: string | Record<string, unknown>; startingAfter?: string } = {},
+): Promise<TwentyPage<T>> {
+  const cleanPath = path.startsWith("/") ? path.slice(1) : path;
+  const limit = Math.min(Math.max(options.limit ?? 200, 1), 200);
+  const query: Record<string, string> = {
+    limit: String(limit),
+    orderBy: "id[AscNullsFirst]",
+  };
+  if (options.startingAfter) {
+    query.filter = `id[gt]:"${options.startingAfter}"`;
+  } else if (options.filter) {
+    query.filter = typeof options.filter === "string"
+      ? options.filter
+      : JSON.stringify(options.filter);
+  }
+
+  const response = await fetchTwenty<{
+    data?: {
+      [key: string]: unknown;
+      rows?: T[];
+      edges?: { node?: T }[];
+    };
+    totalCount?: number;
+    pageInfo?: unknown;
+  }>(path, { query });
+
+  const records = unwrapTwentyList<T>(response, cleanPath);
+  const ids = records.map((r: any) => r?.id).filter((id: any) => typeof id === "string");
+  return {
+    records,
+    pageInfo: {
+      // Full page ⇒ maybe more. A short/empty page ends the walk.
+      hasNextPage: records.length >= limit,
+      endCursor: ids.length > 0 ? ids[ids.length - 1] : null,
+    },
+    totalCount: typeof (response as any)?.totalCount === "number" ? (response as any).totalCount : 0,
+  };
+}
+
+/**
+ * Walk every page and return all records (guarded at 50 pages / ~10k rows).
+ */
+export async function listTwentyAll<T = TwentyRecord>(
+  path: string,
+  options: { filter?: string | Record<string, unknown> } = {},
+): Promise<T[]> {
+  const all: T[] = [];
+  let cursor: string | undefined;
+  let guard = 0;
+  for (;;) {
+    const { records, pageInfo } = await listTwentyPage<T>(path, { ...options, startingAfter: cursor });
+    all.push(...records);
+    if (!pageInfo.hasNextPage || !pageInfo.endCursor || ++guard > 50) break;
+    cursor = pageInfo.endCursor;
+  }
+  log.info(`Walked ${all.length} total records in ${path}`);
+  return all;
+}
+
 // Export a client object with all methods for convenience
 export const twentyClient = {
   fetch: fetchTwenty,
@@ -464,6 +538,8 @@ export const twentyClient = {
   delete: deleteTwenty,
   get: getTwenty,
   list: listTwenty,
+  listPage: listTwentyPage,
+  listAll: listTwentyAll,
   graphqlMutation,
   updateGraphQL: updateTwentyGraphQL,
   loadSyncConfig,

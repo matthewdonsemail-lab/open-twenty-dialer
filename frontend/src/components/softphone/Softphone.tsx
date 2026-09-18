@@ -14,19 +14,32 @@ import {
 import { getSipConfig, isSipConfigured, getSipDomain, getSipExtension } from "@/sip";
 import { Button } from "@/components/ui/Button";
 import { OutcomeSelect } from "@/components/common/OutcomeSelect";
+import { api } from "@/lib/apiClient";
 import type { Database } from "@/types/database";
 
 type Lead = Database["public"]["Tables"]["leads"]["Row"];
 
+export interface CallMember {
+  id: string;
+  email: string;
+}
+
 interface SoftphoneProps {
   lead: Lead | null;
   callerId?: string;
+  /** agencyPhones row id — claimed in Twenty for the duration of the call */
+  phoneId?: string | null;
+  /** Signed-in Twenty member (the claimant) */
+  member?: CallMember | null;
+  prospectId?: string | null;
+  leadId?: string | null;
   onCallEnd?: (outcome: {
     outcome: string;
     duration: number;
     notes: string;
     direction: "outbound" | "inbound";
-    recordingUrl?: string;
+    recordingUrl?: string | null;
+    callId?: string | null;
   }) => void;
 }
 
@@ -35,7 +48,7 @@ type CallState = "idle" | "connecting" | "ringing" | "active" | "on_hold" | "mut
 const FOCUS_RING =
   "focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ods-brand-500)] focus-visible:outline-offset-1";
 
-export function Softphone({ lead, callerId, onCallEnd }: SoftphoneProps) {
+export function Softphone({ lead, callerId, phoneId, member, prospectId, leadId, onCallEnd }: SoftphoneProps) {
   const [callState, setCallState] = useState<CallState>("idle");
   const [duration, setDuration] = useState(0);
   const [notes, setNotes] = useState("");
@@ -44,6 +57,7 @@ export function Softphone({ lead, callerId, onCallEnd }: SoftphoneProps) {
   const [keypadVisible, setKeypadVisible] = useState(false);
   const [dialNumber, setDialNumber] = useState("");
   const [holdActive, setHoldActive] = useState(false);
+  const [claimError, setClaimError] = useState<string | null>(null);
   const [incomingCall, setIncomingCall] = useState<{
     callerNumber: string;
     callerName: string;
@@ -58,6 +72,12 @@ export function Softphone({ lead, callerId, onCallEnd }: SoftphoneProps) {
   const inboundSessionRef = useRef<any>(null);
   const wasEstablishedRef = useRef(false);
   const callStateRef = useRef<CallState>("idle");
+  // Claim + call-log refs (survive re-renders, used by cleanup paths)
+  const holdRef = useRef<{ phoneId: string; memberId: string } | null>(null);
+  const callLogIdRef = useRef<string | null>(null);
+  const uploadedRecordingUrlRef = useRef<string | null>(null);
+  const startedAtRef = useRef<string | null>(null);
+  const phoneNumberForCallRef = useRef<string>("");
 
   // Audio refs
   const remoteAudioRef = useRef<HTMLAudioElement>(null);
@@ -74,12 +94,24 @@ export function Softphone({ lead, callerId, onCallEnd }: SoftphoneProps) {
     callStateRef.current = callState;
   }, [callState]);
 
-  // Cleanup media streams and recording on unmount
+  const outcomeRef = useRef(outcome);
+  const durationRef = useRef(duration);
+  const directionRef = useRef(direction);
+  useEffect(() => { outcomeRef.current = outcome; }, [outcome]);
+  useEffect(() => { durationRef.current = duration; }, [duration]);
+  useEffect(() => { directionRef.current = direction; }, [direction]);
+
+  // Cleanup media streams and recording on unmount (release any held number)
   useEffect(() => {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
       stopRecording();
       stopLocalStream();
+      const hold = holdRef.current;
+      if (hold) {
+        holdRef.current = null;
+        api.twentyPhones.release(hold.phoneId, { memberId: hold.memberId }).catch(() => {});
+      }
       if (inboundSessionRef.current) {
         try { inboundSessionRef.current.terminate(); } catch {}
         inboundSessionRef.current = null;
@@ -127,6 +159,72 @@ export function Softphone({ lead, callerId, onCallEnd }: SoftphoneProps) {
       localStreamRef.current = null;
     }
   }, []);
+
+  // --- Twenty number claim (single holder per number, synced to SIP state) ---
+  const claimNumber = useCallback(async (): Promise<boolean> => {
+    if (!phoneId || !member) return true; // no number context: dial without a claim
+    try {
+      await api.twentyPhones.claim(phoneId, { memberId: member.id, memberEmail: member.email });
+      holdRef.current = { phoneId, memberId: member.id };
+      setClaimError(null);
+      return true;
+    } catch (err: any) {
+      const message = err?.message || "Number is in use";
+      setClaimError(message);
+      return false;
+    }
+  }, [phoneId, member]);
+
+  const setPhoneActive = useCallback(() => {
+    const hold = holdRef.current;
+    if (!hold) return;
+    api.twentyPhones.setState(hold.phoneId, { memberId: hold.memberId, state: "ACTIVE" }).catch(() => {});
+  }, []);
+
+  const releaseNumber = useCallback(async (callId?: string | null) => {
+    const hold = holdRef.current;
+    if (!hold) return;
+    holdRef.current = null;
+    try {
+      await api.twentyPhones.release(hold.phoneId, { memberId: hold.memberId, callId: callId ?? undefined });
+    } catch {
+      // best-effort: claim expires on next holder's claim path
+    }
+  }, []);
+
+  const mapOutcomeToCallStatus = (o: string): string => {
+    if (o === "answered") return "COMPLETED";
+    if (o === "no_answer") return "NO_ANSWER";
+    if (o === "busy") return "BUSY";
+    if (o === "failed") return "FAILED";
+    return "COMPLETED";
+  };
+
+  // Create the agencyCalls row once per call (guarded: SIP Terminated + manual end both land here)
+  const finalizeCall = useCallback(async (finalOutcome: string, finalDuration: number, finalDirection: "outbound" | "inbound") => {
+    if (callLogIdRef.current) return;
+    try {
+      const row = await api.calls.create({
+        direction: finalDirection.toUpperCase(),
+        status: mapOutcomeToCallStatus(finalOutcome),
+        fromNumber: callerId || undefined,
+        toNumber: phoneNumberForCallRef.current || undefined,
+        startedAt: startedAtRef.current || undefined,
+        endedAt: new Date().toISOString(),
+        durationSeconds: finalDuration,
+        agencyPhoneId: holdRef.current?.phoneId || phoneId || undefined,
+        agencyProspectId: prospectId || undefined,
+        agencyLeadId: leadId || lead?.id || undefined,
+      });
+      callLogIdRef.current = row?.id ?? null;
+      // Attach the recording if it already uploaded; otherwise the upload path PATCHes it later
+      if (uploadedRecordingUrlRef.current && callLogIdRef.current) {
+        api.calls.update(callLogIdRef.current, { recordingUrl: uploadedRecordingUrlRef.current }).catch(() => {});
+      }
+    } catch (err) {
+      console.error("Failed to log call to agencyCalls:", err);
+    }
+  }, [callerId, phoneId, prospectId, leadId, lead?.id]);
 
   // Recording functions
   const startRecording = useCallback(() => {
@@ -214,7 +312,13 @@ export function Softphone({ lead, callerId, onCallEnd }: SoftphoneProps) {
 
       const data = await response.json();
       console.log("Recording uploaded:", data);
-      return data.recordingUrl;
+      const url = (data?.recordingUrl ?? null) as string | null;
+      uploadedRecordingUrlRef.current = url;
+      // If the call row already exists, attach the recording to it now
+      if (url && callLogIdRef.current) {
+        api.calls.update(callLogIdRef.current, { recordingUrl: url }).catch(() => {});
+      }
+      return url;
     } catch (err) {
       console.error("Failed to upload recording:", err);
       setRecordingError("Failed to upload recording");
@@ -231,11 +335,20 @@ export function Softphone({ lead, callerId, onCallEnd }: SoftphoneProps) {
   const startCall = useCallback(async () => {
     if (!phoneNumber) return;
 
+    setClaimError(null);
+    // Claim the sending number first: another member holding it blocks the dial
+    const claimed = await claimNumber();
+    if (!claimed) return;
+
     setCallState("connecting");
     setDuration(0);
     setNotes("");
     setOutcome("no_answer");
     wasEstablishedRef.current = false;
+    callLogIdRef.current = null;
+    uploadedRecordingUrlRef.current = null;
+    startedAtRef.current = new Date().toISOString();
+    phoneNumberForCallRef.current = phoneNumber;
     setMicrophoneError(null);
     setRecordingError(null);
 
@@ -326,6 +439,7 @@ export function Softphone({ lead, callerId, onCallEnd }: SoftphoneProps) {
           wasEstablishedRef.current = true;
           setCallState("active");
           setOutcome("answered");
+          setPhoneActive();
           console.log("Call established - starting recording");
           // Start recording once call is established
           setTimeout(() => startRecording(), 500);
@@ -335,6 +449,7 @@ export function Softphone({ lead, callerId, onCallEnd }: SoftphoneProps) {
           }
           setCallState("ended");
           console.log("Call terminated");
+          void finalizeCall(outcomeRef.current, durationRef.current, directionRef.current);
         } else if (state === SessionState.Establishing) {
           setCallState("ringing");
         }
@@ -346,7 +461,7 @@ export function Softphone({ lead, callerId, onCallEnd }: SoftphoneProps) {
       console.warn("SIP.js call failed, using simulated call:", err);
       startSimulatedCall();
     }
-  }, [phoneNumber, callerId, startSimulatedCall, getLocalStream]);
+  }, [phoneNumber, callerId, startSimulatedCall, getLocalStream, claimNumber]);
 
   const endCall = useCallback(async () => {
     // Stop recording if active
@@ -377,7 +492,10 @@ export function Softphone({ lead, callerId, onCallEnd }: SoftphoneProps) {
     setIncomingCall(null);
     setCallState("ended");
     if (intervalRef.current) clearInterval(intervalRef.current);
-  }, [stopRecording, stopLocalStream]);
+    // Covers simulated calls (no SIP Terminated event) and user hangup:
+    // guarded, so the SIP listener path won't double-log.
+    void finalizeCall(outcomeRef.current, durationRef.current, directionRef.current);
+  }, [stopRecording, stopLocalStream, finalizeCall]);
 
   const toggleMute = useCallback(() => {
     const isCurrentlyMuted = callState === "muted";
@@ -423,10 +541,12 @@ export function Softphone({ lead, callerId, onCallEnd }: SoftphoneProps) {
   }, [callState]);
 
   const handleSaveOutcome = useCallback(async () => {
-    // Recording is already uploaded via onstop callback
-    // Just signal the call is done with its metadata
+    // Wrap-up ends the hold: release the number with the finished call attached,
+    // then hand metadata (incl. recording URL) to the parent.
+    const callId = callLogIdRef.current;
+    await releaseNumber(callId);
     if (onCallEnd) {
-      onCallEnd({ outcome, duration, notes, direction });
+      onCallEnd({ outcome, duration, notes, direction, recordingUrl: uploadedRecordingUrlRef.current, callId });
     }
 
     // Reset state
@@ -436,7 +556,11 @@ export function Softphone({ lead, callerId, onCallEnd }: SoftphoneProps) {
     setOutcome("no_answer");
     setDirection("outbound");
     setIsRecording(false);
-  }, [onCallEnd, outcome, duration, notes, direction]);
+    setClaimError(null);
+    callLogIdRef.current = null;
+    uploadedRecordingUrlRef.current = null;
+    startedAtRef.current = null;
+  }, [onCallEnd, outcome, duration, notes, direction, releaseNumber]);
 
   const handleAcceptIncomingCall = useCallback(async () => {
     const session = inboundSessionRef.current;
@@ -575,6 +699,13 @@ export function Softphone({ lead, callerId, onCallEnd }: SoftphoneProps) {
           {recordingError && (
             <div className="bg-red-500/10 border border-red-500/20 rounded-ods-sm p-2 text-[11px] text-red-600">
               {recordingError}
+            </div>
+          )}
+
+          {/* Number claim conflict */}
+          {claimError && (
+            <div className="bg-amber-500/10 border border-amber-500/20 rounded-ods-sm p-2 text-[11px] text-amber-700">
+              Number in use — {claimError}. It releases when the holder wraps up.
             </div>
           )}
 

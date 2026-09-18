@@ -25,6 +25,7 @@ import twentyPhonesRoutes from "./routes/twentyPhones.js";
 import twentyMetaRoutes from "./routes/twentyMeta.js";
 import twentySetupRoutes from "./routes/twentySetup.js";
 import { callLogsRouter } from "./routes/callLogs.js";
+import callsRouter from "./routes/calls.js";
 import { profilesRouter } from "./routes/profiles.js";
 import { getTwentyPgStatus } from "./db/twenty-pg.js";
 import { createLogger } from "./lib/logger.js";
@@ -78,6 +79,7 @@ app.use("/api/twenty/phones", twentyPhonesRoutes);
 app.use("/api/twenty/meta", twentyMetaRoutes);
 app.use("/api/setup/twenty", twentySetupRoutes);
 app.use("/api/call-logs", callLogsRouter);
+app.use("/api/calls", callsRouter);
 app.use("/api/profiles", profilesRouter);
 
 /**

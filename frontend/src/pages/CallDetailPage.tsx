@@ -6,34 +6,30 @@ import { PageCanvas } from "@/components/common/PageCanvas";
 import { WidgetCard } from "@/components/ui/WidgetCard";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { Spokes } from "@/components/ui/Spinner";
-import { ArrowLeft, Phone, Clock, User, FileText, Calendar } from "lucide-react";
-
-type Lead = any;
-type Profile = any;
-type CallLog = any;
+import { ArrowLeft, Phone, Clock, User, FileText, Calendar, AudioLines } from "lucide-react";
 
 export function CallDetailPage() {
   const { callId } = useParams<{ callId: string }>();
   const navigate = useNavigate();
 
-  const { data: callLog, isLoading: callLoading } = useQuery<CallLog>({
-    queryKey: ["callLog", callId],
-    queryFn: () => api.callLogs.get(callId ?? ""),
+  const { data: call, isLoading: callLoading } = useQuery<any>({
+    queryKey: ["call", callId],
+    queryFn: () => api.calls.get(callId ?? ""),
     enabled: !!callId,
+    staleTime: 30000,
+  });
+
+  const { data: lead } = useQuery<any>({
+    queryKey: ["lead", call?.agencyLeadId],
+    queryFn: () => api.leads.get(call?.agencyLeadId ?? ""),
+    enabled: !!call?.agencyLeadId,
     staleTime: Infinity,
   });
 
-  const { data: lead } = useQuery<Lead>({
-    queryKey: ["lead", callLog?.lead_id],
-    queryFn: () => api.leads.get(callLog?.lead_id ?? ""),
-    enabled: !!callLog?.lead_id,
-    staleTime: Infinity,
-  });
-
-  const { data: profile } = useQuery<Profile>({
-    queryKey: ["profile", callLog?.user_id],
-    queryFn: () => api.profiles.list().then((profiles: Profile[]) => profiles.find((p) => p.id === callLog?.user_id)),
-    enabled: !!callLog?.user_id,
+  const { data: prospect } = useQuery<any>({
+    queryKey: ["prospect", call?.agencyProspectId],
+    queryFn: () => api.prospects.get(call?.agencyProspectId ?? ""),
+    enabled: !!call?.agencyProspectId,
     staleTime: Infinity,
   });
 
@@ -45,7 +41,7 @@ export function CallDetailPage() {
     );
   }
 
-  if (!callLog) {
+  if (!call) {
     return (
       <div className="text-center py-12">
         <p className="text-[13px] text-[var(--ods-text-secondary)]">Call record not found</p>
@@ -59,10 +55,13 @@ export function CallDetailPage() {
     );
   }
 
-  const agentName = profile?.full_name || "Unknown";
-  const leadName = lead ? `${lead.first_name} ${lead.last_name}` : callLog.lead_id || "—";
-  const durationMinutes = Math.floor(callLog.duration_seconds / 60);
-  const durationSeconds = callLog.duration_seconds % 60;
+  const record = lead ?? prospect;
+  const agentName = call.createdBy?.name || "Unknown";
+  const recordName = record
+    ? `${record.first_name ?? ""} ${record.last_name ?? ""}`.trim() || record.phone || call.toNumber || "—"
+    : call.toNumber || "—";
+  const durationMinutes = Math.floor((call.durationSeconds ?? 0) / 60);
+  const durationSeconds = (call.durationSeconds ?? 0) % 60;
   const duration = durationMinutes > 0 ? `${durationMinutes}m ${durationSeconds}s` : `${durationSeconds}s`;
 
   return (
@@ -79,15 +78,15 @@ export function CallDetailPage() {
           <span className="text-[13px] font-semibold">Call Details</span>
         </div>
       }
-      subtitle={`Call ID: ${callLog.id}`}
+      subtitle={`Call ID: ${call.id}`}
     >
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         {/* Call Information */}
         <WidgetCard title="Call Information" icon={Phone}>
           <dl className="flex flex-col gap-[var(--ods-sp-3)]">
             <div>
-              <dt className="text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-tertiary)]">Outcome</dt>
-              <dd className="mt-1"><StatusBadge status={callLog.outcome} /></dd>
+              <dt className="text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-tertiary)]">Status</dt>
+              <dd className="mt-1"><StatusBadge status={call.status ?? "unknown"} /></dd>
             </div>
             <div>
               <dt className="text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-tertiary)]">Duration</dt>
@@ -95,18 +94,24 @@ export function CallDetailPage() {
             </div>
             <div>
               <dt className="text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-tertiary)]">Direction</dt>
-              <dd className="mt-1 text-[13px] text-[var(--ods-text-primary)] capitalize">{callLog.direction || "—"}</dd>
+              <dd className="mt-1 text-[13px] text-[var(--ods-text-primary)] capitalize">{(call.direction || "—").toLowerCase()}</dd>
+            </div>
+            <div>
+              <dt className="text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-tertiary)]">From → To</dt>
+              <dd className="mt-1 text-[13px] text-[var(--ods-text-primary)] font-mono">
+                {call.fromNumber || "—"} → {call.toNumber || "—"}
+              </dd>
             </div>
             <div>
               <dt className="text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-tertiary)]">Started At</dt>
               <dd className="mt-1 text-[13px] text-[var(--ods-text-primary)]">
-                {callLog.started_at ? new Date(callLog.started_at).toLocaleString() : "—"}
+                {call.startedAt ? new Date(call.startedAt).toLocaleString() : "—"}
               </dd>
             </div>
             <div>
               <dt className="text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-tertiary)]">Ended At</dt>
               <dd className="mt-1 text-[13px] text-[var(--ods-text-primary)]">
-                {callLog.ended_at ? new Date(callLog.ended_at).toLocaleString() : "—"}
+                {call.endedAt ? new Date(call.endedAt).toLocaleString() : "—"}
               </dd>
             </div>
           </dl>
@@ -121,57 +126,98 @@ export function CallDetailPage() {
             </div>
             <div>
               <dt className="text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-tertiary)]">Lead/Prospect</dt>
-              <dd className="mt-1 text-[13px] text-[var(--ods-text-primary)]">{leadName}</dd>
+              <dd className="mt-1 text-[13px] text-[var(--ods-text-primary)]">{recordName}</dd>
             </div>
-            {lead && (
+            {record && (
               <>
                 <div>
                   <dt className="text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-tertiary)]">Company</dt>
-                  <dd className="mt-1 text-[13px] text-[var(--ods-text-secondary)]">{lead.company || "—"}</dd>
+                  <dd className="mt-1 text-[13px] text-[var(--ods-text-secondary)]">{record.company || record.niche || "—"}</dd>
                 </div>
                 <div>
                   <dt className="text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-tertiary)]">Phone</dt>
-                  <dd className="mt-1 text-[13px] text-[var(--ods-text-secondary)] font-mono">{lead.phone || "—"}</dd>
+                  <dd className="mt-1 text-[13px] text-[var(--ods-text-secondary)] font-mono">{record.phone || "—"}</dd>
                 </div>
                 <div>
                   <dt className="text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-tertiary)]">Email</dt>
-                  <dd className="mt-1 text-[13px] text-[var(--ods-text-secondary)]">{lead.email || "—"}</dd>
+                  <dd className="mt-1 text-[13px] text-[var(--ods-text-secondary)]">{record.email || "—"}</dd>
                 </div>
               </>
             )}
           </dl>
         </WidgetCard>
 
+        {/* Recording + transcript */}
+        <WidgetCard title="Recording" icon={AudioLines}>
+          {call.recordingUrl ? (
+            <audio controls src={call.recordingUrl} className="w-full" />
+          ) : (
+            <p className="text-[13px] text-[var(--ods-text-secondary)]">No recording yet</p>
+          )}
+          <p className="mt-2 text-[11px] text-[var(--ods-text-tertiary)]">
+            Transcription: {call.transcriptionStatus ?? "NONE"}
+          </p>
+          {call.transcript && (
+            <p className="mt-2 text-[13px] text-[var(--ods-text-secondary)] whitespace-pre-wrap max-h-48 overflow-y-auto">
+              {call.transcript}
+            </p>
+          )}
+        </WidgetCard>
+
+        {/* Meeting (booked from this call) */}
+        <WidgetCard title="Meeting" icon={Calendar}>
+          {call.meetingUrl ? (
+            <dl className="flex flex-col gap-[var(--ods-sp-3)]">
+              <div>
+                <dt className="text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-tertiary)]">Link</dt>
+                <dd className="mt-1">
+                  <a href={call.meetingUrl} target="_blank" rel="noreferrer" className="text-[13px] text-[var(--ods-brand-600)] hover:underline break-all">
+                    {call.meetingUrl}
+                  </a>
+                </dd>
+              </div>
+              <div>
+                <dt className="text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-tertiary)]">Provider</dt>
+                <dd className="mt-1 text-[13px] text-[var(--ods-text-primary)]">{call.meetingProvider ?? "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-tertiary)]">When</dt>
+                <dd className="mt-1 text-[13px] text-[var(--ods-text-primary)]">
+                  {call.meetingAt ? new Date(call.meetingAt).toLocaleString() : "—"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-tertiary)]">Status</dt>
+                <dd className="mt-1"><StatusBadge status={call.meetingStatus ?? "unknown"} /></dd>
+              </div>
+            </dl>
+          ) : (
+            <p className="text-[13px] text-[var(--ods-text-secondary)]">No meeting booked from this call yet</p>
+          )}
+        </WidgetCard>
+
         {/* Notes */}
-        <WidgetCard title="Notes" icon={FileText}>
+        <WidgetCard title="Summary" icon={FileText}>
           <p className="text-[13px] text-[var(--ods-text-secondary)] whitespace-pre-wrap min-h-[100px]">
-            {callLog.notes || "No notes recorded"}
+            {call.summary || "No summary recorded"}
           </p>
         </WidgetCard>
 
         {/* Technical Details */}
-        <WidgetCard title="Technical Details" icon={Calendar}>
+        <WidgetCard title="Technical Details" icon={Clock}>
           <dl className="flex flex-col gap-[var(--ods-sp-3)]">
             <div>
-              <dt className="text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-tertiary)]">SIP Call ID</dt>
-              <dd className="mt-1 text-[12px] text-[var(--ods-text-secondary)] font-mono">{callLog.sip_call_id || "—"}</dd>
+              <dt className="text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-tertiary)]">Telnyx Call ID</dt>
+              <dd className="mt-1 text-[12px] text-[var(--ods-text-secondary)] font-mono break-all">{call.telnyxCallId || "—"}</dd>
             </div>
             <div>
-              <dt className="text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-tertiary)]">Recording URL</dt>
-              <dd className="mt-1 text-[12px] text-[var(--ods-text-secondary)] font-mono break-all">
-                {callLog.recording_url || "No recording"}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-tertiary)]">Transcript</dt>
-              <dd className="mt-1 text-[12px] text-[var(--ods-text-secondary)]">
-                {callLog.transcript ? "Available" : "Not available"}
-              </dd>
+              <dt className="text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-tertiary)]">Telnyx Recording ID</dt>
+              <dd className="mt-1 text-[12px] text-[var(--ods-text-secondary)] font-mono break-all">{call.telnyxRecordingId || "—"}</dd>
             </div>
             <div>
               <dt className="text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-tertiary)]">Created At</dt>
               <dd className="mt-1 text-[13px] text-[var(--ods-text-primary)]">
-                {callLog.created_at ? new Date(callLog.created_at).toLocaleString() : "—"}
+                {call.created_at ? new Date(call.created_at).toLocaleString() : "—"}
               </dd>
             </div>
           </dl>

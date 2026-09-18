@@ -43,6 +43,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const isProspectDetail = location.pathname.startsWith('/prospects/') && location.pathname !== '/prospects';
   const currentNav = navItems.find((n) => location.pathname.startsWith(n.to));
 
+  // Compact mode is strictly opt-in via ?embed=1 (e.g. small Twenty panels).
+  // Default iframe embeds show the FULL app with sidebar — no auto-detection,
+  // so pasting a plain URL into a Twenty iframe widget keeps all chrome.
+  const params = new URLSearchParams(location.search);
+  const isEmbed = params.get('embed') === '1' || params.get('framed') === '1';
+
   // Extract ID from URL
   const leadId = useMemo(() => {
     const match = location.pathname.match(/^\/leads\/([^/]+)$/);
@@ -73,6 +79,25 @@ export function Layout({ children }: { children: React.ReactNode }) {
   async function handleSignOut() {
     await signOut();
     navigate('/login');
+  }
+
+  if (isEmbed) {
+    return (
+      <div className="flex flex-col h-screen overflow-hidden bg-[var(--ods-bg-primary,#ffffff)] text-[var(--ods-text-primary,#18181b)] font-sans antialiased">
+        <div className="flex items-center justify-between h-8 px-3 border-b border-[var(--ods-border,#e5e5ea)] text-[12px] text-[var(--ods-text-secondary,#575757)]">
+          <span className="font-medium truncate">{currentNav?.label ?? 'Cold Dialer'}</span>
+          <a
+            href={location.pathname + location.search.replace(/[?&]embed=1/, '').replace(/[?&]framed=1/, '')}
+            target="_blank"
+            rel="noreferrer"
+            className="hover:text-[var(--ods-text-primary,#18181b)] underline underline-offset-2"
+          >
+            Open full page
+          </a>
+        </div>
+        <main className="flex flex-col flex-1 min-w-0 min-h-0">{children}</main>
+      </div>
+    );
   }
 
   return (

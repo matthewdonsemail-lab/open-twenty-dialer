@@ -1,5 +1,19 @@
 {
+  "name": "open-twenty-dialer",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -n backend,frontend -c blue,green \"bun run dev:backend\" \"bun run dev:frontend\"",
+    "dev:backend": "cd ./backend && bun run dev",
+    "dev:frontend": "cd ./frontend && bun run dev",
+    "install:all": "bun install && cd ./backend && bun install && cd ../frontend && bun install && cd ..",
+    "build": "cd ./backend && bun run build && cd ../frontend && bun run build && cd ..",
+    "start": "cd ./backend && bun run start"
+  },
   "dependencies": {
     "@tanstack/react-query": "^5.101.4"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
   }
 }

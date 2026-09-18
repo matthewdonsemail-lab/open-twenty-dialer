@@ -2,8 +2,7 @@ import React, { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useLead } from "@/hooks/useLeads";
-import { useCallLog } from "@/hooks/useCallLogs";
-import { useCreateCallLog } from "@/hooks/useCallLogs";
+import { useCallsForRecord } from "@/hooks/useCallLogs";
 import { useUpdateLead, useDeleteLead } from "@/hooks/useLeads";
 import { Softphone } from "@/components/softphone/Softphone";
 import { CallScriptWidget } from "@/components/scripts/CallScriptWidget";
@@ -18,7 +17,10 @@ import { Badge } from "@/components/ui/Badge";
 import { useToast } from "@/components/ui/Toast";
 import { ArrowLeft, Edit3, Trash2, Phone, Mail, Globe, MapPin } from "lucide-react";
 import { Spokes } from "@/components/ui/Spinner";
+import { CountryBadge } from "@/components/common/CountryBadge";
 import { api } from "@/lib/apiClient";
+import { useAuth } from "@/components/auth/AuthProvider";
+import { useQueryClient } from "@tanstack/react-query";
 
 export function LeadDetailPage() {
   const { leadId } = useParams<{ leadId: string }>();
@@ -27,11 +29,21 @@ export function LeadDetailPage() {
   const { data: lead, isLoading } = useLead(leadId ?? "");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const member = user ? { id: user.twentyUserId ?? user.id, email: user.email } : null;
+  const recentCalls = useCallsForRecord({ leadId: leadId ?? null });
 
-  React.useEffect(() => {
-    if (lead) console.log("LeadDetailPage data:", JSON.stringify(lead, null, 2));
-  }, [lead]);
-  const { data: callLogs } = useCallLog(leadId ?? "");
+  // Default sending number for leads (first ACTIVE row; claim enforced server-side)
+  const { data: phones } = useQuery({
+    queryKey: ["twenty-phones"],
+    queryFn: async () => api.twentyPhones.list(),
+    staleTime: 30000,
+  });
+  const defaultPhoneRow =
+    (phones ?? []).find((p: any) => p.state === "ACTIVE" && (p.callState || "IDLE") === "IDLE") ??
+    (phones ?? []).find((p: any) => p.state === "ACTIVE") ??
+    null;
 
   // Fetch campaigns to resolve campaign_id to name
   const { data: campaigns } = useQuery({
@@ -53,25 +65,13 @@ export function LeadDetailPage() {
     ? mapLeadProspectStatusOptions(meta.fields["coldCallStatus"])
     : [];
 
-  const createCallLog = useCreateCallLog();
   const updateLeadMutation = useUpdateLead();
   const deleteLeadMutation = useDeleteLead();
 
-  function handleCallEnd(data: { outcome: string; duration: number; notes: string; direction: "outbound" | "inbound" }) {
-    createCallLog.mutateAsync({
-      lead_id: leadId ?? null,
-      user_id: null,
-      campaign_id: null,
-      direction: data.direction,
-      outcome: data.outcome as any,
-      duration_seconds: data.duration,
-      recording_url: null,
-      transcript: null,
-      sip_call_id: null,
-      started_at: null,
-      ended_at: null,
-      notes: data.notes,
-    });
+  function handleCallEnd(data: { outcome: string; duration: number; notes: string; direction: "outbound" | "inbound"; recordingUrl?: string | null; callId?: string | null }) {
+    // Call row is already logged to agencyCalls by the Softphone (with recording).
+    queryClient.invalidateQueries({ queryKey: ["calls"] });
+    queryClient.invalidateQueries({ queryKey: ["twenty-phones"] });
 
     // Update lead status based on call outcome
     const statusMap: Record<string, string> = {
@@ -149,6 +149,7 @@ export function LeadDetailPage() {
             {lead.first_name} {lead.last_name}
           </span>
           <StatusBadge status={lead.status} />
+          <CountryBadge country={(lead as any).country} />
         </div>
       }
       subtitle={`${lead.company ?? "No company"}${locationLine ? ` · ${locationLine}` : ""}`}
@@ -166,7 +167,13 @@ export function LeadDetailPage() {
       <div className="flex flex-col gap-[var(--ods-sp-6)]">
         {/* Main Dialing Row: Softphone + Call Script + Lead Details */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-[var(--ods-sp-6)] items-stretch">
-          <Softphone lead={lead} onCallEnd={handleCallEnd} />
+          <Softphone
+            lead={lead}
+            phoneId={defaultPhoneRow?.id ?? null}
+            member={member}
+            leadId={leadId ?? null}
+            onCallEnd={handleCallEnd}
+          />
           <CallScriptWidget campaignId={lead.campaign_id ?? null} />
           <WidgetCard title="Lead Details">
             <div className="flex flex-col gap-[var(--ods-sp-4)]">
@@ -180,6 +187,20 @@ export function LeadDetailPage() {
                   options={statusOptions}
                   onChange={handleStatusChange}
                 />
+              </div>
+
+              {/* Qualification */}
+              <div>
+                <dt className="text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-tertiary)] mb-2">
+                  Qualification
+                </dt>
+                {(lead as any).qualificationStatus ? (
+                  <Badge variant={(lead as any).qualificationStatus === 'QUALIFIED' ? 'green' : (lead as any).qualificationStatus === 'DISQUALIFIED' ? 'rose' : 'gray'}>
+                    {(lead as any).qualificationStatus}
+                  </Badge>
+                ) : (
+                  <span className="text-[11px] text-[var(--ods-text-tertiary)]">—</span>
+                )}
               </div>
 
               {/* Industry Badge */}
@@ -210,6 +231,7 @@ export function LeadDetailPage() {
                   ["Website", lead.website ?? "—"],
                   ["Address", lead.address ?? "—"],
                   ["City", locationLine || "—"],
+                  ["Country", (lead as any).country ?? "—"],
                   ["Calls", String(lead.call_count ?? 0)],
                   ["Last Called", lead.last_called_at ? new Date(lead.last_called_at).toLocaleString() : "Never"],
                   ["Created", new Date(lead.created_at).toLocaleDateString()],
@@ -269,20 +291,27 @@ export function LeadDetailPage() {
               )}
             </div>
           </WidgetCard>
-          {callLogs && callLogs.length > 0 && (
+          {recentCalls && recentCalls.length > 0 && (
             <WidgetCard title="Recent Calls">
               <div className="flex flex-col gap-[var(--ods-sp-3)]">
-                {callLogs.slice(0, 5).map((log) => (
-                  <div key={log.id} className="border-l-2 border-[var(--ods-brand-300)] pl-3 py-2">
+                {recentCalls.slice(0, 5).map((call) => (
+                  <div key={call.id} className="border-l-2 border-[var(--ods-brand-300)] pl-3 py-2">
                     <div className="flex items-center justify-between">
-                      <StatusBadge status={log.outcome} />
-                      <span className="text-[11px] text-[var(--ods-text-tertiary)]">{log.duration_seconds}s</span>
+                      <StatusBadge status={call.status ?? "unknown"} />
+                      <span className="text-[11px] text-[var(--ods-text-tertiary)]">{call.durationSeconds}s</span>
                     </div>
-                    {log.notes && (
-                      <p className="text-[11px] text-[var(--ods-text-secondary)] mt-1">{log.notes}</p>
+                    {call.recordingUrl && (
+                      <a
+                        href={call.recordingUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[11px] text-[var(--ods-brand-600)] hover:underline mt-1 inline-block"
+                      >
+                        Play recording
+                      </a>
                     )}
                     <p className="text-[11px] text-[var(--ods-text-tertiary)] mt-1">
-                      {new Date(log.created_at).toLocaleString()}
+                      {new Date(call.created_at).toLocaleString()}
                     </p>
                   </div>
                 ))}

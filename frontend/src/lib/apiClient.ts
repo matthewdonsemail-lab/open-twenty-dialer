@@ -164,6 +164,21 @@ export const api = {
 
   twentyPhones: {
     list: () => request<any[]>("/api/twenty/phones"),
+    claim: (id: string, member: { memberId: string; memberEmail?: string }) =>
+      request<any>(`/api/twenty/phones/${id}/claim`, { method: "POST", body: JSON.stringify(member) }),
+    setState: (id: string, data: { memberId: string; state: "DIALING" | "ACTIVE" }) =>
+      request<any>(`/api/twenty/phones/${id}/state`, { method: "POST", body: JSON.stringify(data) }),
+    release: (id: string, data: { memberId: string; force?: boolean; callId?: string }) =>
+      request<any>(`/api/twenty/phones/${id}/release`, { method: "POST", body: JSON.stringify(data) }),
+  },
+
+  calls: {
+    list: () => request<any[]>("/api/calls"),
+    get: (id: string) => request<any>(`/api/calls/${id}`),
+    create: (data: any) =>
+      request<any>("/api/calls", { method: "POST", body: JSON.stringify(data) }),
+    update: (id: string, data: any) =>
+      request<any>(`/api/calls/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   },
 
   twentyMeta: {

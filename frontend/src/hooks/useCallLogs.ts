@@ -36,3 +36,52 @@ export function useCreateCallLog() {
     },
   });
 }
+
+export interface AgencyCallRecord {
+  id: string;
+  name: string | null;
+  direction: string | null;
+  status: string | null;
+  fromNumber: string | null;
+  toNumber: string | null;
+  startedAt: string | null;
+  endedAt: string | null;
+  durationSeconds: number;
+  telnyxCallId: string | null;
+  telnyxRecordingId: string | null;
+  recordingUrl: string | null;
+  transcript: string | null;
+  transcriptionStatus: string | null;
+  summary: string | null;
+  meetingUrl: string | null;
+  meetingProvider: string | null;
+  meetingAt: string | null;
+  meetingStatus: string | null;
+  meetingBookingId: string | null;
+  agencyPhoneId: string | null;
+  agencyProspectId: string | null;
+  agencyLeadId: string | null;
+  createdBy: { name?: string; source?: string } | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Live call records from Twenty agencyCalls (replaces legacy call_logs). */
+export function useCalls() {
+  return useQuery<AgencyCallRecord[]>({
+    queryKey: ["calls"],
+    queryFn: async () => {
+      return api.calls.list();
+    },
+    staleTime: 30000,
+  });
+}
+
+/** Calls linked to one lead or prospect. */
+export function useCallsForRecord(record: { leadId?: string | null; prospectId?: string | null }) {
+  const { data: calls } = useCalls();
+  const { leadId, prospectId } = record;
+  return (calls ?? []).filter((c) =>
+    (leadId && c.agencyLeadId === leadId) || (prospectId && c.agencyProspectId === prospectId)
+  );
+}

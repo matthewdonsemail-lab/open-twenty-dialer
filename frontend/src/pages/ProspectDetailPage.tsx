@@ -15,8 +15,10 @@ import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Badge } from "@/components/ui/Badge";
 import { ArrowLeft, Edit3, Trash2, Phone, Mail, Globe, MapPin } from "lucide-react";
+import { CountryBadge } from "@/components/common/CountryBadge";
 import { Spokes } from "@/components/ui/Spinner";
 import { useToast } from "@/components/ui/Toast";
+import { useAuth } from "@/components/auth/AuthProvider";
 
 interface Prospect {
   id: string;
@@ -65,6 +67,16 @@ export function ProspectDetailPage() {
   const [showEdit, setShowEdit] = useState(false);
   const [editingData, setEditingData] = useState<Partial<Prospect>>({});
   const [agencyFromNumber, setAgencyFromNumber] = useState("");
+  const { user } = useAuth();
+  const member = user ? { id: user.twentyUserId ?? user.id, email: user.email } : null;
+
+  // Resolve the selected sending number to its agencyPhones row (for claiming)
+  const { data: phones } = useQuery({
+    queryKey: ["twenty-phones"],
+    queryFn: async () => api.twentyPhones.list(),
+    staleTime: 30000,
+  });
+  const activePhoneRow = (phones ?? []).find((p: any) => p.phoneNumber === agencyFromNumber) ?? null;
 
   // Fetch campaigns to resolve campaign_id to name
   const { data: campaigns } = useQuery({
@@ -121,9 +133,11 @@ export function ProspectDetailPage() {
     },
   });
 
-  async function handleCallEnd(data: { outcome: string; duration: number; notes: string; direction: "outbound" | "inbound" }) {
-    // Future: add call logging for prospects
-    console.log("Call ended:", data);
+  async function handleCallEnd(data: { outcome: string; duration: number; notes: string; direction: "outbound" | "inbound"; recordingUrl?: string | null; callId?: string | null }) {
+    // Call row is already logged to agencyCalls by the Softphone (with recording);
+    // here we advance prospect status and refresh phone claim state.
+    queryClient.invalidateQueries({ queryKey: ["calls"] });
+    queryClient.invalidateQueries({ queryKey: ["twenty-phones"] });
 
     // Update prospect status based on call outcome
     const statusMap: Record<string, string> = {
@@ -194,9 +208,10 @@ export function ProspectDetailPage() {
             <ArrowLeft className="w-4 h-4" />
           </button>
           <span>
-            {prospect.first_name} {prospect.last_name}
-          </span>
-          <StatusBadge status={prospect.status ?? "unknown"} />
+              {prospect.first_name} {prospect.last_name}
+            </span>
+            <StatusBadge status={prospect.status ?? "unknown"} />
+            <CountryBadge country={prospect.country} />
         </div>
       }
       subtitle={prospect.company ?? "No company"}
@@ -214,7 +229,14 @@ export function ProspectDetailPage() {
       <div className="flex flex-col gap-[var(--ods-sp-6)]">
         {/* Main Dialing Row: Softphone + Call Script + Prospect Details */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-[var(--ods-sp-6)] items-start">
-          <Softphone lead={prospect as any} callerId={agencyFromNumber || undefined} onCallEnd={handleCallEnd} />
+          <Softphone
+            lead={prospect as any}
+            callerId={agencyFromNumber || undefined}
+            phoneId={activePhoneRow?.id ?? null}
+            member={member}
+            prospectId={prospectId ?? null}
+            onCallEnd={handleCallEnd}
+          />
           <CallScriptWidget campaignId={prospect?.campaign_id ?? null} />
           <WidgetCard title="Prospect Details" className="h-[460px]">
             <div className="flex flex-col gap-[var(--ods-sp-4)] h-full overflow-y-auto pr-1">
@@ -271,6 +293,7 @@ export function ProspectDetailPage() {
                   ["Email", prospect.email ?? "—"],
                   ["City", prospect.city ?? "—"],
                   ["State", prospect.state ?? "—"],
+                  ["Country", prospect.country ?? "—"],
                   ["Created", prospect.created_at ? new Date(prospect.created_at).toLocaleDateString() : "—"],
                 ].map(([label, value]) => (
                   <div key={label}>
