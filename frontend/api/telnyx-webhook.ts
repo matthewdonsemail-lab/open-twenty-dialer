@@ -6,6 +6,7 @@
  *
  * Env (Vercel project settings, never bundled):
  *   TWENTY_BASE_URL, TWENTY_API_KEY, TELNYX_WEBHOOK_TOKEN
+ * Build note: SIP_* vars bake into the SPA at build time (Vite).
  *
  * Handled events:
  *   call.recording.saved                -> attach recording to agencyCalls (by telnyxCallId)
