@@ -1,22 +1,22 @@
 import React from "react";
 import { useLeads } from "@/hooks/useLeads";
-import { useCallLogs } from "@/hooks/useCallLogs";
+import { useCalls } from "@/hooks/useCallLogs";
 import { BarChart3, Users, Phone, TrendingUp, Clock } from "lucide-react";
 import { PageCanvas } from "@/components/common/PageCanvas";
 import { WidgetCard } from "@/components/ui/WidgetCard";
 
 export function AdminPage() {
   const { data: leads } = useLeads();
-  const { data: callLogs } = useCallLogs();
+  const { data: calls } = useCalls();
 
   const totalLeads = leads?.length ?? 0;
   const newLeads = leads?.filter((l) => l.status === "new").length ?? 0;
-  const totalCalls = callLogs?.length ?? 0;
-  const answeredCalls = (callLogs ?? []).filter((l) => l.outcome === "answered").length ?? 0;
+  const totalCalls = calls?.length ?? 0;
+  const answeredCalls = (calls ?? []).filter((l) => l.status === "COMPLETED").length ?? 0;
   const avgDuration =
     totalCalls > 0
       ? Math.round(
-          (callLogs ?? []).reduce((sum, l) => sum + (l.duration_seconds ?? 0), 0) / totalCalls
+          (calls ?? []).reduce((sum, l) => sum + (l.durationSeconds ?? 0), 0) / totalCalls
         )
       : 0;
   const conversionRate =
@@ -33,10 +33,10 @@ export function AdminPage() {
   ];
 
   const outcomeBreakdown = [
-    { label: "Answered", count: answeredCalls, color: "bg-emerald-500" },
-    { label: "No Answer", count: (callLogs ?? []).filter((l) => l.outcome === "no_answer").length ?? 0, color: "bg-gray-400" },
-    { label: "Busy", count: (callLogs ?? []).filter((l) => l.outcome === "busy").length ?? 0, color: "bg-red-400" },
-    { label: "Voicemail", count: (callLogs ?? []).filter((l) => l.outcome === "voicemail").length ?? 0, color: "bg-amber-400" },
+    { label: "Completed", count: answeredCalls, color: "bg-emerald-500" },
+    { label: "No Answer", count: (calls ?? []).filter((l) => l.status === "NO_ANSWER").length ?? 0, color: "bg-gray-400" },
+    { label: "Busy", count: (calls ?? []).filter((l) => l.status === "BUSY").length ?? 0, color: "bg-red-400" },
+    { label: "Failed", count: (calls ?? []).filter((l) => l.status === "FAILED").length ?? 0, color: "bg-amber-400" },
   ];
 
   const maxOutcome = Math.max(...outcomeBreakdown.map((o) => o.count), 1);

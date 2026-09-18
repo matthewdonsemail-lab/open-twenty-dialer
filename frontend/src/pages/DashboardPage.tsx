@@ -1,6 +1,6 @@
 import React from "react";
 import { useLeads } from "@/hooks/useLeads";
-import { useCallLogs } from "@/hooks/useCallLogs";
+import { useCalls } from "@/hooks/useCallLogs";
 import {
   Users,
   Phone,
@@ -15,19 +15,19 @@ import { Spokes } from "@/components/ui/Spinner";
 
 export function DashboardPage() {
   const { data: leads, isLoading: leadsLoading } = useLeads();
-  const { data: callLogs, isLoading: logsLoading } = useCallLogs();
+  const { data: calls, isLoading: logsLoading } = useCalls();
 
   const totalLeads = leads?.length ?? 0;
   const newLeads = leads?.filter((l) => l.status === "new").length ?? 0;
   const contactedLeads = leads?.filter((l) => l.status === "contacted").length ?? 0;
   const interestedLeads = leads?.filter((l) => l.status === "interested").length ?? 0;
   const convertedLeads = leads?.filter((l) => l.status === "converted").length ?? 0;
-  const totalCalls = callLogs?.length ?? 0;
-  const answeredCalls = (callLogs ?? []).filter((l) => l.outcome === "answered").length ?? 0;
+  const totalCalls = calls?.length ?? 0;
+  const answeredCalls = (calls ?? []).filter((l) => l.status === "COMPLETED").length ?? 0;
   const avgDuration =
-    totalCalls > 0 && callLogs
+    totalCalls > 0 && calls
       ? Math.round(
-          callLogs.reduce((sum, l) => sum + (l.duration_seconds ?? 0), 0) /
+          calls.reduce((sum, l) => sum + (l.durationSeconds ?? 0), 0) /
             totalCalls
         )
       : 0;
@@ -88,11 +88,11 @@ export function DashboardPage() {
         </WidgetCard>
 
         <WidgetCard title="Recent Activity">
-          {callLogs?.length === 0 ? (
+          {calls?.length === 0 ? (
             <p className="text-[12px] text-[var(--ods-text-secondary)]">No call activity yet</p>
           ) : (
             <div className="space-y-2">
-              {(callLogs ?? [])
+              {(calls ?? [])
                 .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
                 .slice(0, 5)
                 .map((log) => (
@@ -103,10 +103,10 @@ export function DashboardPage() {
                     <Phone className="w-3.5 h-3.5 text-[var(--ods-text-tertiary)]" />
                     <div className="flex-1 min-w-0">
                       <p className="text-[12px] font-medium text-[var(--ods-text-primary)] truncate">
-                        {log.outcome}
+                        {log.status}
                       </p>
                       <p className="text-[11px] text-[var(--ods-text-tertiary)]">
-                        {log.duration_seconds}s
+                        {log.durationSeconds}s
                       </p>
                     </div>
                     <span className="text-[11px] text-[var(--ods-text-tertiary)]">
