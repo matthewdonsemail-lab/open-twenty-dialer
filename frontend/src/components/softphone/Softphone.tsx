@@ -200,7 +200,10 @@ export function Softphone({ lead, callerId, phoneId, member, prospectId, leadId,
     return "COMPLETED";
   };
 
-  // Create the agencyCalls row once per call (guarded: SIP Terminated + manual end both land here)
+  // Create the agencyCalls row once per call (guarded: SIP Terminated + manual end both land here).
+  // NOTE: lead?.id is deliberately NOT used as agencyLeadId — on prospect pages
+  // the `lead` prop carries a prospect record, and its id would violate the
+  // agencyLead foreign key. Only the explicit leadId prop (real leads) is linked.
   const finalizeCall = useCallback(async (finalOutcome: string, finalDuration: number, finalDirection: "outbound" | "inbound") => {
     if (callLogIdRef.current) return;
     try {
@@ -214,7 +217,7 @@ export function Softphone({ lead, callerId, phoneId, member, prospectId, leadId,
         durationSeconds: finalDuration,
         agencyPhoneId: holdRef.current?.phoneId || phoneId || undefined,
         agencyProspectId: prospectId || undefined,
-        agencyLeadId: leadId || lead?.id || undefined,
+        agencyLeadId: leadId || undefined,
       });
       callLogIdRef.current = row?.id ?? null;
       // Attach the recording if it already uploaded; otherwise the upload path PATCHes it later
