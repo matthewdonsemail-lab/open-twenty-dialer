@@ -1,0 +1,4 @@
+interface:
+  display_name: "Create Railcode App"
+  short_description: "Build and deploy Railcode apps"
+  default_prompt: "Use $create-railcode-app to build a Railcode app from idea to deployment."

@@ -821,40 +821,65 @@ docker compose up -d server
 
 ---
 
-## Future Improvements
+## Native Twenty App (`twenty-native-app/`)
 
-### Twenty CRM SDK Integration
+The dialer is now shipped **natively inside Twenty** as an installable app, not just a
+standalone SPA. `twenty-native-app/` is scaffolded from `create-twenty-app` (Twenty 2.41.0)
+and installed into the workspace at `https://twenty.inferencesaver.com` via the
+Twenty CLI. It lives at `src/` in that folder and is published/installed like this:
 
-**Goal:** Migrate from custom fetch-based implementation to Twenty's official SDK for better type safety and maintainability.
-
-**What we tried:**
-1. Installed `twenty-client-sdk` package
-2. Attempted to use `RestApiClient` from `twenty-client-sdk/rest`
-3. Created TypeScript interfaces in `backend/src/types/twenty.ts`
-4. Updated all route handlers to use typed responses
-
-**Why it didn't work:**
-- The SDK's `RestApiClient` returns responses in a different format than raw fetch
-- Response parsing broke — all queries returned 0 records
-- The SDK wraps responses differently than Twenty's native API format
-
-**Lessons learned:**
-- Twenty's REST API returns: `{ data: { agencyProspects: [...] }, totalCount: N, pageInfo: {...} }`
-- The SDK's response shape didn't match our extraction logic
-- For now, keeping the custom fetch-based implementation works reliably
-
-**To try again in the future:**
 ```bash
-# Install the SDK
-cd backend
-npm install twenty-client-sdk
-
-# Generate typed clients
-npx twenty dev:generate-client --remote https://twenty.yourdomain.com --api-key YOUR_KEY
+cd twenty-native-app
+yarn install
+# remote is pre-configured in .twenty/remote.json (production = twenty.inferencesaver.com)
+yarn twenty app:publish --private   # build + upload tarball to the workspace registry
+yarn twenty app:install             # install into the live workspace
 ```
 
-**Key findings from the migration attempt:**
-- Twenty uses `{fieldName}Id` pattern for relation fields in REST API (e.g., `campaignIdId`)
-- GraphQL mutations work for metadata operations (creating objects/fields)
-- The `twentyClient` object should export both named functions AND an object wrapper
-- Response parsing must handle multiple shapes: direct array, `{ data: [...] }`, `{ data: { objectName: [...] } }`
+What the native app contains:
+
+- **33 dialer logic functions** (`src/logic-functions/*.logic-function.ts`) — the full
+  CRUD + phone-claim protocol exposed as `/dialer/*` HTTP routes, running *inside* the
+  Twenty server with its own key-value store (no sidecar Express needed for dialer CRUD).
+  Each is a thin wrapper over `src/lib/dialer-client.ts`, which talks to the workspace
+  via `RestApiClient` (record access) and `MetadataApiClient` (SELECT options, claim
+  state). This is the *second* integration path: the first is the standalone `backend/`
+  Express API in this same repo.
+- **A native front component** (`src/front-components/main-page.tsx`) — a sidebar page
+  with Queue / Numbers / Calls / Campaigns / Scripts tabs, record-row selection
+  (select-all + per-row), status pills, claim/release actions, and inline call logging.
+  Built on `twenty-ui` primitives (`Status`, `Tag`, `SelectDisplay`) + theme tokens,
+  no hand-rolled styling.
+- **Role + permissions** (`src/roles/default-role.ts`) — declares what the app may read
+  and write; the app's default role is what `runAgent`/logic functions run under.
+
+### Deploying a change to the native app
+
+```bash
+cd twenty-native-app
+yarn twenty app:publish --private && yarn twenty app:install
+```
+
+The publish step builds the app (TypeScript typecheck runs automatically) and uploads a
+tarball to the workspace's app registry; install then applies it to the live server.
+To preview before installing, `yarn twenty plan` shows the metadata diff without
+touching the workspace.
+
+### Standalone SPA (legacy, still works)
+
+The original browser-based softphone SPA lives in `frontend/` and the Express API in
+`backend/` — both still deploy independently (Vercel + node01 Funnel). Use the native
+app for in-Twenty dialing (no separate login, no extra host); use the SPA when you need
+the browser softphone UI or to test SIP/WebRTC outside the workspace.
+
+## Troubleshooting
+
+### Native app install: "No application with this universalIdentifier"
+Run `yarn twenty remote:use production` first, then `yarn twenty app:publish --private`.
+The CLI must know which workspace registry to push to.
+
+### Native app: logic function 500 "Record not found"
+The `RestApiClient` in `src/lib/dialer-client.ts` resolves its base URL from the
+workspace env at runtime — confirm `STORAGE_S3_PRESIGNED_URL_ENABLED=false` is set on the
+Twenty server (it must proxy files through the app origin, not redirect to R2, or the
+front component's bundle fetch 404s → "Failed to fetch" in the widget).
