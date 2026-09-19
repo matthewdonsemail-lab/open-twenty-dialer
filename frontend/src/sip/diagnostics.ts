@@ -15,7 +15,7 @@ export type SipEventLevel = "debug" | "info" | "warn" | "error";
 export interface SipEvent {
   t: string;
   level: SipEventLevel;
-  area: "transport" | "register" | "invite" | "session" | "media" | "claim" | "netcheck" | "app";
+  area: "transport" | "register" | "invite" | "session" | "media" | "claim" | "netcheck" | "app" | "ice" | "audio";
   message: string;
   data?: Record<string, unknown>;
 }
@@ -28,6 +28,7 @@ export type SipFailureKind =
   | "AUTH_FAILED"
   | "NO_OUTBOUND_PROFILE"
   | "MEDIA_REJECTED"
+  | "ICE_FAILED"
   | "BUSY_OR_DECLINED"
   | "NOT_FOUND_OR_ROUTING"
   | "NO_ANSWER_TIMEOUT"
@@ -73,9 +74,10 @@ export function classifyFailure(input: {
   sipStatusCode?: number | null;
   micDenied?: boolean;
   notConfigured?: boolean;
+  iceFailed?: boolean;
   wsUrl?: string;
 }): ClassifiedFailure {
-  const { wsCloseCode, timedOut, sipStatusCode, micDenied, notConfigured, wsUrl } = input;
+  const { wsCloseCode, timedOut, sipStatusCode, micDenied, notConfigured, iceFailed, wsUrl } = input;
   const where = wsUrl ? ` (${wsUrl})` : "";
   if (notConfigured) {
     return {
@@ -116,6 +118,14 @@ export function classifyFailure(input: {
         title: "Media rejected (488)",
         detail: "Telnyx answered but our SDP answer could not be applied (historically: missing RTCP-MUX).",
         hint: "rtcpMuxPolicy=negotiate should tolerate this — if it persists, capture the SDP answer from the log.",
+      };
+    }
+    if (iceFailed) {
+      return {
+        kind: "ICE_FAILED",
+        title: "Media path failed (ICE)",
+        detail: "Signaling completed but no audio path could be established (ICE failed/disconnected, likely UDP blocked or symmetric NAT with no TURN relay).",
+        hint: "Check the ice/audio trail in diagnostics. If host+srflx candidates never pair, the network needs TURN (Telnyx TURN credentials) or UDP egress opened.",
       };
     }
     if (sipStatusCode === 486 || sipStatusCode === 603) {

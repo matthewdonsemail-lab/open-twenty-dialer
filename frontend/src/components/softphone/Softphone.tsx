@@ -9,7 +9,6 @@ import {
   Clock,
   RotateCcw,
   Check,
-  Radio,
 } from "lucide-react";
 import { getSipConfig, isSipConfigured, getSipDomain, getSipExtension } from "@/sip";
 import { sipLog, classifyFailure, getReport, type ClassifiedFailure } from "@/sip";
@@ -73,8 +72,6 @@ export function Softphone({ lead, callerId, phoneId, member, prospectId, leadId,
     callerName: string;
     session: any;
   } | null>(null);
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordingError, setRecordingError] = useState<string | null>(null);
   const [microphoneError, setMicrophoneError] = useState<string | null>(null);
   const [fatalError, setFatalError] = useState<ClassifiedFailure | null>(null);
   const [diagCopied, setDiagCopied] = useState(false);
@@ -87,22 +84,20 @@ export function Softphone({ lead, callerId, phoneId, member, prospectId, leadId,
   // Claim + call-log refs (survive re-renders, used by cleanup paths)
   const holdRef = useRef<{ phoneId: string; memberId: string } | null>(null);
   const callLogIdRef = useRef<string | null>(null);
-  const uploadedRecordingUrlRef = useRef<string | null>(null);
   const startedAtRef = useRef<string | null>(null);
   const phoneNumberForCallRef = useRef<string>("");
   const telnyxCallControlIdRef = useRef<string | null>(null);
   const lastSipStatusRef = useRef<number | null>(null);
   const transportTimedOutRef = useRef(false);
+  const iceFailedRef = useRef(false);
   const lastFailureRef = useRef<ClassifiedFailure | null>(null);
 
-  // Audio refs
+  // Audio refs (playback only — recording is Telnyx server-side)
   const remoteAudioRef = useRef<HTMLAudioElement>(null);
   const localAudioRef = useRef<HTMLAudioElement>(null);
 
   // Media refs
   const localStreamRef = useRef<MediaStream | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const recordedChunksRef = useRef<Blob[]>([]);
 
   const phoneNumber = lead?.phone ?? dialNumber;
 
@@ -117,11 +112,10 @@ export function Softphone({ lead, callerId, phoneId, member, prospectId, leadId,
   useEffect(() => { durationRef.current = duration; }, [duration]);
   useEffect(() => { directionRef.current = direction; }, [direction]);
 
-  // Cleanup media streams and recording on unmount (release any held number)
+  // Cleanup media streams on unmount (release any held number)
   useEffect(() => {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
-      stopRecording();
       stopLocalStream();
       const hold = holdRef.current;
       if (hold) {
@@ -237,10 +231,6 @@ export function Softphone({ lead, callerId, phoneId, member, prospectId, leadId,
         agencyLeadId: leadId || undefined,
       });
       callLogIdRef.current = row?.id ?? null;
-      // Attach the recording if it already uploaded; otherwise the upload path PATCHes it later
-      if (uploadedRecordingUrlRef.current && callLogIdRef.current) {
-        api.calls.update(callLogIdRef.current, { recordingUrl: uploadedRecordingUrlRef.current }).catch(() => {});
-      }
       // Attach the SIP event trail for post-mortem (server log + Call History detail)
       if (callLogIdRef.current) {
         const report = getReport(getSipConfig(), lastFailureRef.current ?? {
@@ -253,105 +243,70 @@ export function Softphone({ lead, callerId, phoneId, member, prospectId, leadId,
     }
   }, [callerId, phoneId, prospectId, leadId]);
 
-  // Recording functions
-  const startRecording = useCallback(() => {
-    if (!localStreamRef.current) return;
-
+  // Remote media attach — called on Established, when the peer connection
+  // definitely exists. Follows the SIP.js attach-media pattern: pull receivers
+  // directly (tracks may already be present) AND listen for late tracks.
+  // Recording is Telnyx server-side only; this element is playback-only.
+  const setupRemoteMedia = useCallback((session: any) => {
     try {
-      recordedChunksRef.current = [];
-
-      // Try to get both local and remote audio for recording
-      const recordingStream = new MediaStream();
-
-      // Add local mic track
-      localStreamRef.current.getAudioTracks().forEach(track => {
-        recordingStream.addTrack(track);
-      });
-
-      // Add remote audio track if available
-      if (remoteAudioRef.current?.srcObject) {
-        const remoteStream = remoteAudioRef.current.srcObject as MediaStream;
-        remoteStream.getAudioTracks().forEach(track => {
-          recordingStream.addTrack(track);
-        });
+      const sdh: any = session?.sessionDescriptionHandler;
+      const pc: RTCPeerConnection | undefined = sdh?.peerConnection;
+      if (!pc) {
+        sipLog.warn("audio", "no peerConnection at attach time — will retry on track event");
       }
-
-      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-        ? "audio/webm;codecs=opus"
-        : MediaRecorder.isTypeSupported("audio/webm")
-          ? "audio/webm"
-          : "audio/ogg";
-
-      const recorder = new MediaRecorder(recordingStream, { mimeType });
-
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          recordedChunksRef.current.push(event.data);
+      const remoteStream = new MediaStream();
+      const attachTrack = (track: MediaStreamTrack | null | undefined, origin: string) => {
+        if (!track || track.kind !== "audio") return;
+        if (!remoteStream.getTrackById(track.id)) {
+          remoteStream.addTrack(track);
+          sipLog.info("audio", `remote audio track attached (${origin})`, {
+            id: track.id, readyState: track.readyState, muted: track.muted, enabled: track.enabled,
+          });
         }
       };
-
-      recorder.onstop = async () => {
-        const blob = new Blob(recordedChunksRef.current, { type: mimeType });
-        console.log(`Recording completed: ${blob.size} bytes`);
-
-        // Upload recording
-        await uploadRecording(blob);
-      };
-
-      recorder.start(1000); // Collect 1s chunks
-      mediaRecorderRef.current = recorder;
-      setIsRecording(true);
-      console.log("Recording started");
-    } catch (err) {
-      console.error("Failed to start recording:", err);
-      setRecordingError("Failed to start recording");
+      if (pc) {
+        pc.getReceivers().forEach((receiver) => attachTrack(receiver?.track, "receivers"));
+        pc.addEventListener("track", (event: any) => {
+          const tracks: MediaStreamTrack[] =
+            event.streams?.[0]?.getAudioTracks?.() || (event.track ? [event.track] : []);
+          tracks.forEach((t) => attachTrack(t, "track-event"));
+          if (remoteAudioRef.current && event.streams?.[0] && !remoteAudioRef.current.srcObject) {
+            remoteAudioRef.current.srcObject = event.streams[0];
+          }
+        });
+        const logIce = () =>
+          sipLog.info("ice", `ice=${pc.iceConnectionState} conn=${pc.connectionState}`);
+        pc.addEventListener("iceconnectionstatechange", () => {
+          logIce();
+          if (pc.iceConnectionState === "failed") {
+            iceFailedRef.current = true;
+            sipLog.error("ice", "ICE failed — no workable media path (UDP blocked/symmetric NAT with no TURN?)");
+          } else if (pc.iceConnectionState === "disconnected") {
+            sipLog.warn("ice", "ICE disconnected — may recover, watching");
+          } else if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
+            sipLog.info("ice", "media path established");
+          }
+        });
+        pc.addEventListener("connectionstatechange", logIce);
+        logIce();
+      }
+      if (remoteAudioRef.current) {
+        remoteAudioRef.current.srcObject = remoteStream;
+        const pr = remoteAudioRef.current.play() as unknown as Promise<void> | undefined;
+        if (pr && typeof (pr as any).catch === "function") {
+          (pr as Promise<void>).then(() =>
+            sipLog.info("audio", "remote element playing", { paused: remoteAudioRef.current?.paused })
+          ).catch((e: any) =>
+            sipLog.error("audio", `remote play() rejected (autoplay policy?): ${e?.message || e}`)
+          );
+        } else {
+          sipLog.info("audio", "remote element srcObject set", { paused: remoteAudioRef.current.paused });
+        }
+      }
+    } catch (err: any) {
+      sipLog.error("audio", `setupRemoteMedia threw: ${err?.message || err}`);
     }
   }, []);
-
-  const stopRecording = useCallback(async () => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-      mediaRecorderRef.current.stop();
-      mediaRecorderRef.current = null;
-      setIsRecording(false);
-    }
-  }, []);
-
-  const uploadRecording = useCallback(async (blob: Blob) => {
-    if (!blob || blob.size === 0) {
-      console.warn("No recording data to upload");
-      return null;
-    }
-
-    try {
-      const formData = new FormData();
-      formData.append("recording", blob, `call-recording-${Date.now()}.webm`);
-      formData.append("callId", ""); // Will be populated from call log
-      formData.append("leadId", lead?.id || "");
-
-      const response = await fetch("/api/calls/recording", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error(`Upload failed: ${response.status}`);
-      }
-
-      const data = await response.json();
-      console.log("Recording uploaded:", data);
-      const url = (data?.recordingUrl ?? null) as string | null;
-      uploadedRecordingUrlRef.current = url;
-      // If the call row already exists, attach the recording to it now
-      if (url && callLogIdRef.current) {
-        api.calls.update(callLogIdRef.current, { recordingUrl: url }).catch(() => {});
-      }
-      return url;
-    } catch (err) {
-      console.error("Failed to upload recording:", err);
-      setRecordingError("Failed to upload recording");
-      return null;
-    }
-  }, [lead?.id]);
 
   // Loud terminal failure: banner + console + agencyCalls row + release.
   // There is deliberately NO silent fallback — a failed dial must say why.
@@ -391,14 +346,13 @@ export function Softphone({ lead, callerId, phoneId, member, prospectId, leadId,
     setOutcome("no_answer");
     wasEstablishedRef.current = false;
     callLogIdRef.current = null;
-    uploadedRecordingUrlRef.current = null;
     telnyxCallControlIdRef.current = null;
     lastSipStatusRef.current = null;
     transportTimedOutRef.current = false;
+    iceFailedRef.current = false;
     startedAtRef.current = new Date().toISOString();
     phoneNumberForCallRef.current = phoneNumber;
     setMicrophoneError(null);
-    setRecordingError(null);
 
     const sipConfig = getSipConfig();
     sipLog.info("app", "sip config", {
@@ -581,9 +535,8 @@ export function Softphone({ lead, callerId, phoneId, member, prospectId, leadId,
           setCallState("active");
           setOutcome("answered");
           setPhoneActive();
-          sipLog.info("session", "call established — starting recording");
-          // Start recording once call is established
-          setTimeout(() => startRecording(), 500);
+          sipLog.info("session", "call established — attaching remote media");
+          setupRemoteMedia(inviter);
         } else if (state === SessionState.Terminated) {
           if (!wasEstablishedRef.current && callStateRef.current === "ringing") {
             setOutcome("no_answer");
@@ -598,6 +551,7 @@ export function Softphone({ lead, callerId, phoneId, member, prospectId, leadId,
             const failure = classifyFailure({
               sipStatusCode: lastSipStatusRef.current,
               timedOut: transportTimedOutRef.current || undefined,
+              iceFailed: iceFailedRef.current || undefined,
               wsUrl: getSipConfig().wsUrl,
             });
             if (failure.kind !== "UNKNOWN") {
@@ -635,8 +589,6 @@ export function Softphone({ lead, callerId, phoneId, member, prospectId, leadId,
   }, [phoneNumber, callerId, startSimulatedCall, getLocalStream, claimNumber, failLoud]);
 
   const endCall = useCallback(async () => {
-    // Stop recording if active
-    await stopRecording();
     stopLocalStream();
 
     if (sessionRef.current) {
@@ -666,7 +618,7 @@ export function Softphone({ lead, callerId, phoneId, member, prospectId, leadId,
     // Covers simulated calls (no SIP Terminated event) and user hangup:
     // guarded, so the SIP listener path won't double-log.
     void finalizeCall(outcomeRef.current, durationRef.current, directionRef.current);
-  }, [stopRecording, stopLocalStream, finalizeCall]);
+  }, [stopLocalStream, finalizeCall]);
 
   const toggleMute = useCallback(() => {
     const isCurrentlyMuted = callState === "muted";
@@ -713,11 +665,12 @@ export function Softphone({ lead, callerId, phoneId, member, prospectId, leadId,
 
   const handleSaveOutcome = useCallback(async () => {
     // Wrap-up ends the hold: release the number with the finished call attached,
-    // then hand metadata (incl. recording URL) to the parent.
+    // then hand metadata to the parent. Server-side Telnyx recording lands later
+    // via webhook (recordingUrl), never via browser upload.
     const callId = callLogIdRef.current;
     await releaseNumber(callId);
     if (onCallEnd) {
-      onCallEnd({ outcome, duration, notes, direction, recordingUrl: uploadedRecordingUrlRef.current, callId });
+      onCallEnd({ outcome, duration, notes, direction, recordingUrl: null, callId });
     }
 
     // Reset state
@@ -726,12 +679,10 @@ export function Softphone({ lead, callerId, phoneId, member, prospectId, leadId,
     setNotes("");
     setOutcome("no_answer");
     setDirection("outbound");
-    setIsRecording(false);
     setClaimError(null);
     setFatalError(null);
     lastFailureRef.current = null;
     callLogIdRef.current = null;
-    uploadedRecordingUrlRef.current = null;
     startedAtRef.current = null;
   }, [onCallEnd, outcome, duration, notes, direction, releaseNumber]);
 
@@ -839,12 +790,6 @@ export function Softphone({ lead, callerId, phoneId, member, prospectId, leadId,
                 {formatDuration(duration)}
               </span>
             )}
-            {isRecording && (
-              <span className="flex items-center gap-1 text-[11px] text-red-500">
-                <Radio className="w-3 h-3 animate-pulse" />
-                REC
-              </span>
-            )}
             <span
               className={`w-1.5 h-1.5 rounded-full ${
                 callState === "active" || callState === "connecting" || callState === "ringing"
@@ -865,13 +810,6 @@ export function Softphone({ lead, callerId, phoneId, member, prospectId, leadId,
           {microphoneError && (
             <div className="bg-red-500/10 border border-red-500/20 rounded-ods-sm p-2 text-[11px] text-red-600">
               {microphoneError}
-            </div>
-          )}
-
-          {/* Recording error */}
-          {recordingError && (
-            <div className="bg-red-500/10 border border-red-500/20 rounded-ods-sm p-2 text-[11px] text-red-600">
-              {recordingError}
             </div>
           )}
 

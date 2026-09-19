@@ -302,9 +302,9 @@ export function LeadDetailPage() {
                       <StatusBadge status={call.status ?? "unknown"} />
                       <span className="text-[11px] text-[var(--ods-text-tertiary)]">{call.durationSeconds}s</span>
                     </div>
-                    {call.recordingUrl && (
+                    {(call.telnyxRecordingId || call.recordingUrl) && (
                       <a
-                        href={call.recordingUrl}
+                        href={call.telnyxRecordingId ? `/api/calls/${call.id}/audio` : call.recordingUrl!}
                         target="_blank"
                         rel="noreferrer"
                         className="text-[11px] text-[var(--ods-brand-600)] hover:underline mt-1 inline-block"

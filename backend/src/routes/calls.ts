@@ -91,7 +91,44 @@ router.get("/:id", async (req, res) => {
   }
 });
 
-// POST /api/calls — log a finished call (browser recording already uploaded)
+// GET /api/calls/:id/audio — redirect to a fresh Telnyx mp3.
+// Telnyx download URLs expire (~10 min), so playback always re-resolves here.
+// The API key never leaves the server.
+router.get("/:id/audio", async (req, res) => {
+  try {
+    const call = await getTwenty<AgencyCall>('agencyCalls', req.params.id as string);
+    if (!call.telnyxRecordingId) {
+      res.status(404).json({ error: "No Telnyx recording for this call yet" });
+      return;
+    }
+    const apiKey = process.env.TELNYX_API_KEY;
+    if (!apiKey) {
+      res.status(500).json({ error: "TELNYX_API_KEY not configured" });
+      return;
+    }
+    const r = await fetch(
+      `https://api.telnyx.com/v2/recordings/${encodeURIComponent(call.telnyxRecordingId)}`,
+      { headers: { Authorization: `Bearer ${apiKey}` } }
+    );
+    if (!r.ok) {
+      log.info(`Telnyx recording lookup failed: ${r.status}`);
+      res.status(502).json({ error: "Telnyx recording lookup failed" });
+      return;
+    }
+    const j: any = await r.json();
+    const url = j?.data?.download_urls?.mp3 || j?.data?.download_urls?.wav;
+    if (!url) {
+      res.status(404).json({ error: "Recording has no download URL yet" });
+      return;
+    }
+    res.redirect(url);
+  } catch (err: any) {
+    log.error("Failed to resolve call audio:", err.message);
+    res.status(500).json({ error: "Failed to resolve call audio", details: err.message });
+  }
+});
+
+// POST /api/calls — log a finished call (recording arrives later via Telnyx webhook)
 router.post("/", async (req: AuthRequest, res) => {
   try {
     const {

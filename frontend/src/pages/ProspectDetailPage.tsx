@@ -19,6 +19,7 @@ import { CountryBadge } from "@/components/common/CountryBadge";
 import { Spokes } from "@/components/ui/Spinner";
 import { useToast } from "@/components/ui/Toast";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { useCallsForRecord } from "@/hooks/useCallLogs";
 
 interface Prospect {
   id: string;
@@ -79,6 +80,7 @@ export function ProspectDetailPage() {
     refetchInterval: 15_000,
   });
   const activePhoneRow = (phones ?? []).find((p: any) => p.phoneNumber === agencyFromNumber) ?? null;
+  const prospectCalls = useCallsForRecord({ prospectId: prospectId ?? null });
 
   // Fetch campaigns to resolve campaign_id to name
   const { data: campaigns } = useQuery({
@@ -316,6 +318,50 @@ export function ProspectDetailPage() {
           fromNumber={agencyFromNumber}
           onFromChange={setAgencyFromNumber}
         />
+
+        {/* Recent Calls (agencyCalls: server-side Telnyx recordings via webhook) */}
+        {prospectCalls.length > 0 && (
+          <WidgetCard title="Recent Calls">
+            <div className="flex flex-col gap-[var(--ods-sp-3)]">
+              {prospectCalls.slice(0, 5).map((call) => (
+                <div key={call.id} className="border-l-2 border-[var(--ods-brand-300)] pl-3 py-2">
+                  <div className="flex items-center justify-between">
+                    <StatusBadge status={call.status ?? "unknown"} />
+                    <span className="text-[11px] text-[var(--ods-text-tertiary)]">{call.durationSeconds}s</span>
+                  </div>
+                  <div className="flex items-center gap-3 mt-1">
+                    {call.telnyxRecordingId && (
+                      <a
+                        href={`/api/calls/${call.id}/audio`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[11px] text-[var(--ods-brand-600)] hover:underline"
+                      >
+                        Play recording
+                      </a>
+                    )}
+                    {call.transcriptionStatus === "READY" && (
+                      <span className="text-[11px] text-[var(--ods-text-tertiary)]">Transcript ready</span>
+                    )}
+                    {call.meetingUrl && (
+                      <a
+                        href={call.meetingUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[11px] text-[var(--ods-brand-600)] hover:underline"
+                      >
+                        Meeting booked
+                      </a>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-[var(--ods-text-tertiary)] mt-1">
+                    {new Date(call.created_at).toLocaleString()}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </WidgetCard>
+        )}
 
         {/* Bottom Row: Notes | Contact Info */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-[var(--ods-sp-6)]">

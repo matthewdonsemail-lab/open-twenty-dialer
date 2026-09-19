@@ -117,10 +117,15 @@ export function CallHistoryPage() {
               </tr>
             ) : filtered.map((call) => {
               const agentName = call.createdBy?.name || "Unknown";
+              const recordPath = call.agencyProspectId
+                ? `/prospects/${call.agencyProspectId}`
+                : call.agencyLeadId
+                  ? `/leads/${call.agencyLeadId}`
+                  : null;
               return (
                 <tr
                   key={call.id}
-                  onClick={() => navigate(`/history/${call.id}`)}
+                  onClick={() => recordPath && navigate(recordPath)}
                   className="h-8 hover:bg-[var(--ods-bg-secondary)] transition-colors cursor-pointer"
                 >
                   <td className="px-3">
@@ -138,9 +143,9 @@ export function CallHistoryPage() {
                   <td className="px-3"><StatusBadge status={call.status ?? "unknown"} /></td>
                   <td className="px-3 text-[13px] text-[var(--ods-text-secondary)]">{call.durationSeconds}s</td>
                   <td className="px-3">
-                    {call.recordingUrl ? (
+                    {call.telnyxRecordingId || call.recordingUrl ? (
                       <a
-                        href={call.recordingUrl}
+                        href={call.telnyxRecordingId ? `/api/calls/${call.id}/audio` : call.recordingUrl!}
                         target="_blank"
                         rel="noreferrer"
                         onClick={(e) => e.stopPropagation()}
