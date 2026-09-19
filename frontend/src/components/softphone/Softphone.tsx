@@ -393,6 +393,13 @@ export function Softphone({ lead, callerId, phoneId, member, prospectId, leadId,
         },
         authorizationUsername: getSipExtension(),
         authorizationPassword: sipConfig.password,
+        // Telnyx answers without RTCP-MUX on some legs; "negotiate" accepts
+        // muxed and non-muxed answers instead of failing with 488.
+        sessionDescriptionHandlerFactoryOptions: {
+          peerConnectionOptions: {
+            rtcConfiguration: { rtcpMuxPolicy: "negotiate" },
+          },
+        } as any,
       });
 
       userAgent.delegate = {

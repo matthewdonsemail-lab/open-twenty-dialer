@@ -21,3 +21,5 @@ test-*.mjs
 test-pg.*
 .scratch/
 backend/scripts/
+.vercel
+.env*
