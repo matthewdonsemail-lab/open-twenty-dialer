@@ -75,6 +75,7 @@ export function Softphone({ lead, callerId, phoneId, member, prospectId, leadId,
   const [microphoneError, setMicrophoneError] = useState<string | null>(null);
   const [fatalError, setFatalError] = useState<ClassifiedFailure | null>(null);
   const [diagCopied, setDiagCopied] = useState(false);
+  const [recWarning, setRecWarning] = useState<string | null>(null);
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const sessionRef = useRef<any>(null);
@@ -90,6 +91,7 @@ export function Softphone({ lead, callerId, phoneId, member, prospectId, leadId,
   const lastSipStatusRef = useRef<number | null>(null);
   const transportTimedOutRef = useRef(false);
   const iceFailedRef = useRef(false);
+  const recordStartedRef = useRef(false);
   const lastFailureRef = useRef<ClassifiedFailure | null>(null);
 
   // Audio refs (playback only — recording is Telnyx server-side)
@@ -214,8 +216,69 @@ export function Softphone({ lead, callerId, phoneId, member, prospectId, leadId,
   // NOTE: lead?.id is deliberately NOT used as agencyLeadId — on prospect pages
   // the `lead` prop carries a prospect record, and its id would violate the
   // agencyLead foreign key. Only the explicit leadId prop (real leads) is linked.
+  const ensureCallRow = useCallback(async (): Promise<string | null> => {
+    if (SIMULATE_CALLS) return null; // explicit sim mode never touches Twenty
+    if (callLogIdRef.current) return callLogIdRef.current;
+    try {
+      const row = await api.calls.create({
+        direction: directionRef.current.toUpperCase(),
+        status: "IN_PROGRESS",
+        fromNumber: callerId || undefined,
+        toNumber: phoneNumberForCallRef.current || undefined,
+        startedAt: startedAtRef.current || undefined,
+        agencyPhoneId: holdRef.current?.phoneId || phoneId || undefined,
+        agencyProspectId: prospectId || undefined,
+        agencyLeadId: leadId || undefined,
+      });
+      callLogIdRef.current = row?.id ?? null;
+      return callLogIdRef.current;
+    } catch (err) {
+      console.error("Failed to create agencyCalls row:", err);
+      return null;
+    }
+  }, [callerId, phoneId, prospectId, leadId]);
+
+  // Start Telnyx server-side recording (+transcription) for the live call.
+  // Plain SIP-trunked calls are NOT auto-recorded — without this there is no
+  // recording object and no call.recording.saved webhook afterwards.
+  const maybeStartServerRecording = useCallback(async () => {
+    if (SIMULATE_CALLS || recordStartedRef.current) return;
+    const ccid = telnyxCallControlIdRef.current;
+    const id = await ensureCallRow();
+    if (!ccid || !id) return;
+    recordStartedRef.current = true;
+    try {
+      const res = await api.calls.record(id);
+      sipLog.info("invite", "server recording started", { telnyxRecordingId: res?.telnyxRecordingId ?? null });
+    } catch (err: any) {
+      recordStartedRef.current = false;
+      const msg = `Server recording failed to start: ${err?.message || err}`;
+      setRecWarning(msg);
+      sipLog.error("invite", msg);
+    }
+  }, [ensureCallRow]);
+
   const finalizeCall = useCallback(async (finalOutcome: string, finalDuration: number, finalDirection: "outbound" | "inbound") => {
-    if (callLogIdRef.current) return;
+    if (SIMULATE_CALLS) return;
+    const report = getReport(getSipConfig(), lastFailureRef.current ?? {
+      kind: "NONE", title: "No failure", detail: "Call ended without a classified failure.", hint: "",
+    }, telnyxCallControlIdRef.current);
+    const debugLog = JSON.stringify(report).slice(0, 8000);
+    // Row created at dial time: patch it closed. Otherwise create it now.
+    if (callLogIdRef.current) {
+      try {
+        await api.calls.update(callLogIdRef.current, {
+          status: mapOutcomeToCallStatus(finalOutcome),
+          endedAt: new Date().toISOString(),
+          durationSeconds: finalDuration,
+          telnyxCallId: telnyxCallControlIdRef.current || undefined,
+          debugLog,
+        });
+      } catch (err) {
+        console.error("Failed to close agencyCalls row:", err);
+      }
+      return;
+    }
     try {
       const row = await api.calls.create({
         direction: finalDirection.toUpperCase(),
@@ -229,15 +292,9 @@ export function Softphone({ lead, callerId, phoneId, member, prospectId, leadId,
         agencyPhoneId: holdRef.current?.phoneId || phoneId || undefined,
         agencyProspectId: prospectId || undefined,
         agencyLeadId: leadId || undefined,
+        debugLog,
       });
       callLogIdRef.current = row?.id ?? null;
-      // Attach the SIP event trail for post-mortem (server log + Call History detail)
-      if (callLogIdRef.current) {
-        const report = getReport(getSipConfig(), lastFailureRef.current ?? {
-          kind: "NONE", title: "No failure", detail: "Call ended without a classified failure.", hint: "",
-        }, telnyxCallControlIdRef.current);
-        api.calls.update(callLogIdRef.current, { debugLog: JSON.stringify(report).slice(0, 8000) }).catch(() => {});
-      }
     } catch (err) {
       console.error("Failed to log call to agencyCalls:", err);
     }
@@ -339,6 +396,9 @@ export function Softphone({ lead, callerId, phoneId, member, prospectId, leadId,
     // Claim the sending number first: another member holding it blocks the dial
     const claimed = await claimNumber();
     if (!claimed) return;
+    // Open the agencyCalls row now (IN_PROGRESS) so the live call has an id
+    // before Telnyx hands us a call-control-id.
+    await ensureCallRow();
 
     setCallState("connecting");
     setDuration(0);
@@ -350,6 +410,8 @@ export function Softphone({ lead, callerId, phoneId, member, prospectId, leadId,
     lastSipStatusRef.current = null;
     transportTimedOutRef.current = false;
     iceFailedRef.current = false;
+    recordStartedRef.current = false;
+    setRecWarning(null);
     startedAtRef.current = new Date().toISOString();
     phoneNumberForCallRef.current = phoneNumber;
     setMicrophoneError(null);
@@ -506,6 +568,8 @@ export function Softphone({ lead, callerId, phoneId, member, prospectId, leadId,
               if (ccid) {
                 telnyxCallControlIdRef.current = String(ccid);
                 sipLog.info("invite", "Telnyx call-control-id captured", { telnyxCallId: String(ccid) });
+                // Answered: a live call-control-id exists — start server recording now
+                void maybeStartServerRecording();
               }
             } catch {
               // header read is best-effort
@@ -537,6 +601,9 @@ export function Softphone({ lead, callerId, phoneId, member, prospectId, leadId,
           setPhoneActive();
           sipLog.info("session", "call established — attaching remote media");
           setupRemoteMedia(inviter);
+          // Belt-and-suspenders: onAccept ordering isn't guaranteed, so also
+          // trigger here (guarded — runs once).
+          void maybeStartServerRecording();
         } else if (state === SessionState.Terminated) {
           if (!wasEstablishedRef.current && callStateRef.current === "ringing") {
             setOutcome("no_answer");
@@ -586,7 +653,7 @@ export function Softphone({ lead, callerId, phoneId, member, prospectId, leadId,
       await failLoud(classifyFailure({ wsUrl: getSipConfig().wsUrl }));
       return;
     }
-  }, [phoneNumber, callerId, startSimulatedCall, getLocalStream, claimNumber, failLoud]);
+  }, [phoneNumber, callerId, startSimulatedCall, getLocalStream, claimNumber, failLoud, ensureCallRow, maybeStartServerRecording]);
 
   const endCall = useCallback(async () => {
     stopLocalStream();
@@ -681,6 +748,8 @@ export function Softphone({ lead, callerId, phoneId, member, prospectId, leadId,
     setDirection("outbound");
     setClaimError(null);
     setFatalError(null);
+    setRecWarning(null);
+    recordStartedRef.current = false;
     lastFailureRef.current = null;
     callLogIdRef.current = null;
     startedAtRef.current = null;
@@ -817,6 +886,13 @@ export function Softphone({ lead, callerId, phoneId, member, prospectId, leadId,
           {claimError && (
             <div className="bg-amber-500/10 border border-amber-500/20 rounded-ods-sm p-2 text-[11px] text-amber-700">
               Number in use — {claimError}. It releases when the holder wraps up.
+            </div>
+          )}
+
+          {/* Server recording could not start (call itself continues) */}
+          {recWarning && (
+            <div className="bg-amber-500/10 border border-amber-500/20 rounded-ods-sm p-2 text-[11px] text-amber-700">
+              {recWarning} — audio still works, but Telnyx won't store this call.
             </div>
           )}
 

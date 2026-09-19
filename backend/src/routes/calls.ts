@@ -128,6 +128,58 @@ router.get("/:id/audio", async (req, res) => {
   }
 });
 
+// POST /api/calls/:id/record — start Telnyx server-side recording (+transcription)
+// for the live call. Plain SIP-trunked calls are NOT auto-recorded; this is
+// what creates the recording object that later arrives via call.recording.saved.
+router.post("/:id/record", async (req, res) => {
+  try {
+    const call = await getTwenty<AgencyCall>('agencyCalls', req.params.id as string);
+    if (!call.telnyxCallId) {
+      res.status(400).json({ error: "Call has no telnyxCallId yet (not answered?)" });
+      return;
+    }
+    const apiKey = process.env.TELNYX_API_KEY;
+    if (!apiKey) {
+      res.status(500).json({ error: "TELNYX_API_KEY not configured" });
+      return;
+    }
+    const r = await fetch(
+      `https://api.telnyx.com/v2/calls/${encodeURIComponent(call.telnyxCallId)}/actions/record_start`,
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ format: "mp3", channels: "dual", transcription: true }),
+      }
+    );
+    const text = await r.text();
+    if (!r.ok) {
+      log.info(`Telnyx record_start failed: ${r.status} ${text.slice(0, 200)}`);
+      res.status(502).json({ error: "Telnyx record_start failed", details: text.slice(0, 200) });
+      return;
+    }
+    let recordingId: string | null = null;
+    try {
+      const j: any = JSON.parse(text);
+      recordingId = j?.data?.recording_id || j?.data?.id || null;
+    } catch { /* non-JSON; ignore */ }
+    if (recordingId) {
+      try {
+        await updateTwenty<AgencyCall>('agencyCalls', call.id, {
+          telnyxRecordingId: recordingId,
+          transcriptionStatus: "PENDING",
+        });
+      } catch (err: any) {
+        log.info(`Could not stamp telnyxRecordingId: ${err.message}`);
+      }
+    }
+    log.info(`Server recording started: call=${call.id} rec=${recordingId || "?"}`);
+    res.json({ ok: true, telnyxRecordingId: recordingId });
+  } catch (err: any) {
+    log.error("Failed to start server recording:", err.message);
+    res.status(500).json({ error: "Failed to start server recording", details: err.message });
+  }
+});
+
 // POST /api/calls — log a finished call (recording arrives later via Telnyx webhook)
 router.post("/", async (req: AuthRequest, res) => {
   try {

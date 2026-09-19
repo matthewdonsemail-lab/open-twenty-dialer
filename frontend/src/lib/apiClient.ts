@@ -179,6 +179,8 @@ export const api = {
       request<any>("/api/calls", { method: "POST", body: JSON.stringify(data) }),
     update: (id: string, data: any) =>
       request<any>(`/api/calls/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+    record: (id: string) =>
+      request<{ ok: boolean; telnyxRecordingId: string | null }>(`/api/calls/${id}/record`, { method: "POST" }),
   },
 
   twentyMeta: {

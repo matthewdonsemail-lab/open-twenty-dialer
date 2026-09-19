@@ -16,6 +16,7 @@ const LeadDetailPage = React.lazy(() => import("@/pages/LeadDetailPage").then((m
 const CampaignPage = React.lazy(() => import("@/pages/CampaignPage").then((m) => ({ default: m.CampaignPage })));
 const CallHistoryPage = React.lazy(() => import("@/pages/CallHistoryPage").then((m) => ({ default: m.CallHistoryPage })));
 const PhoneNumbersPage = React.lazy(() => import("@/pages/PhoneNumbersPage").then((m) => ({ default: m.PhoneNumbersPage })));
+const CallDetailPage = React.lazy(() => import("@/pages/CallDetailPage").then((m) => ({ default: m.CallDetailPage })));
 const ScriptsPage = React.lazy(() => import("@/pages/ScriptsPage").then((m) => ({ default: m.ScriptsPage })));
 const AdminPage = React.lazy(() => import("@/pages/AdminPage").then((m) => ({ default: m.AdminPage })));
 
@@ -63,6 +64,7 @@ function AppRoutes() {
                   <Route path="campaigns" element={<CampaignPage />} />
                   <Route path="scripts" element={<ScriptsPage />} />
                   <Route path="history" element={<CallHistoryPage />} />
+                  <Route path="history/:callId" element={<CallDetailPage />} />
                   <Route path="phone-numbers" element={<PhoneNumbersPage />} />
                   <Route path="admin" element={<AdminPage />} />
                 </Routes>

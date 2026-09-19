@@ -12,6 +12,7 @@ export function CallHistoryPage() {
   const { data: calls, isLoading } = useCalls();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [expandedAudioId, setExpandedAudioId] = useState<string | null>(null);
 
   const { data: leads } = useQuery({
     queryKey: ["leads"],
@@ -117,15 +118,12 @@ export function CallHistoryPage() {
               </tr>
             ) : filtered.map((call) => {
               const agentName = call.createdBy?.name || "Unknown";
-              const recordPath = call.agencyProspectId
-                ? `/prospects/${call.agencyProspectId}`
-                : call.agencyLeadId
-                  ? `/leads/${call.agencyLeadId}`
-                  : null;
+              const hasAudio = !!(call.telnyxRecordingId || call.recordingUrl);
+              const audioOpen = expandedAudioId === call.id;
               return (
+                <React.Fragment key={call.id}>
                 <tr
-                  key={call.id}
-                  onClick={() => recordPath && navigate(recordPath)}
+                  onClick={() => navigate(`/history/${call.id}`)}
                   className="h-8 hover:bg-[var(--ods-bg-secondary)] transition-colors cursor-pointer"
                 >
                   <td className="px-3">
@@ -143,17 +141,17 @@ export function CallHistoryPage() {
                   <td className="px-3"><StatusBadge status={call.status ?? "unknown"} /></td>
                   <td className="px-3 text-[13px] text-[var(--ods-text-secondary)]">{call.durationSeconds}s</td>
                   <td className="px-3">
-                    {call.telnyxRecordingId || call.recordingUrl ? (
-                      <a
-                        href={call.telnyxRecordingId ? `/api/calls/${call.id}/audio` : call.recordingUrl!}
-                        target="_blank"
-                        rel="noreferrer"
-                        onClick={(e) => e.stopPropagation()}
+                    {hasAudio ? (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setExpandedAudioId(audioOpen ? null : call.id);
+                        }}
                         className="inline-flex items-center gap-1 text-[12px] text-[var(--ods-brand-600)] hover:underline"
                       >
                         <AudioLines className="w-3.5 h-3.5" />
-                        Play
-                      </a>
+                        {audioOpen ? "Hide" : "Play"}
+                      </button>
                     ) : (
                       <span className="text-[11px] text-[var(--ods-text-tertiary)]">—</span>
                     )}
@@ -161,6 +159,19 @@ export function CallHistoryPage() {
                   <td className="px-3 text-[13px] text-[var(--ods-text-secondary)] max-w-xs truncate">{call.summary ?? "—"}</td>
                   <td className="px-3 text-[12px] text-[var(--ods-text-tertiary)]">{call.created_at ? new Date(call.created_at).toLocaleString() : "—"}</td>
                 </tr>
+                {audioOpen && (
+                  <tr key={`${call.id}-audio`}>
+                    <td colSpan={7} className="px-3 py-2 bg-[var(--ods-bg-secondary)]">
+                      <audio
+                        controls
+                        preload="none"
+                        src={call.telnyxRecordingId ? `/api/calls/${call.id}/audio` : call.recordingUrl!}
+                        className="w-full max-w-xl"
+                      />
+                    </td>
+                  </tr>
+                )}
+                </React.Fragment>
               );
             })}
           </tbody>
