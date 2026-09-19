@@ -295,7 +295,7 @@ router.post("/", async (req: AuthRequest, res) => {
 router.patch("/:id", async (req, res) => {
   try {
     const allowed = [
-      "status", "endedAt", "durationSeconds", "telnyxRecordingId", "recordingUrl",
+      "status", "endedAt", "durationSeconds", "telnyxCallId", "telnyxRecordingId", "recordingUrl",
       "transcript", "transcriptionStatus", "summary", "debugLog",
       "meetingUrl", "meetingProvider", "meetingAt", "meetingStatus", "meetingBookingId",
     ] as const;
