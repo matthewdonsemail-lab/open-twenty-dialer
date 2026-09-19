@@ -257,6 +257,9 @@ export function Softphone({ lead, callerId, phoneId, member, prospectId, leadId,
     if (!ccid || !id) return;
     recordStartedRef.current = true;
     try {
+      // The /record endpoint reads the row fresh — stamp the call-control-id
+      // first so it can find it (without this it 400s "no telnyxCallId").
+      await api.calls.update(id, { telnyxCallId: ccid });
       const res = await api.calls.record(id);
       sipLog.info("invite", "server recording started", { telnyxRecordingId: res?.telnyxRecordingId ?? null });
     } catch (err: any) {
