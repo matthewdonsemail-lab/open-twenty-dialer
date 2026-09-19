@@ -180,6 +180,56 @@ router.post("/:id/record", async (req, res) => {
   }
 });
 
+// POST /api/calls/:id/reconcile — Telnyx-side fallback: when the browser never
+// captured a call-control-id, find the call's recording by from/to/connection
+// + time window and attach it. Returns { attached: boolean }.
+router.post("/:id/reconcile", async (req, res) => {
+  try {
+    const call = await getTwenty<AgencyCall>('agencyCalls', req.params.id as string);
+    if (call.telnyxRecordingId) {
+      res.json({ attached: true, already: true });
+      return;
+    }
+    const apiKey = process.env.TELNYX_API_KEY;
+    if (!apiKey) {
+      res.status(500).json({ error: "TELNYX_API_KEY not configured" });
+      return;
+    }
+    const since = new Date(new Date(call.createdAt || Date.now()).getTime() - 15 * 60_000).toISOString();
+    const params = new URLSearchParams({ "page[size]": "25", "sort": "-created_at" });
+    if (call.fromNumber) params.set("filter[from]", call.fromNumber);
+    if (call.toNumber) params.set("filter[to]", call.toNumber);
+    const r = await fetch(`https://api.telnyx.com/v2/recordings?${params.toString()}`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    if (!r.ok) {
+      res.status(502).json({ error: "Telnyx recordings lookup failed" });
+      return;
+    }
+    const j: any = await r.json();
+    const match = (j?.data || []).find((rec: any) =>
+      rec?.status === "completed" && (!rec?.created_at || rec.created_at >= since)
+    );
+    if (!match) {
+      res.json({ attached: false });
+      return;
+    }
+    const patch: Record<string, unknown> = {
+      telnyxRecordingId: match.id,
+      transcriptionStatus: "PENDING",
+    };
+    if (match?.download_urls?.mp3) patch.recordingUrl = match.download_urls.mp3;
+    else if (match?.download_urls?.wav) patch.recordingUrl = match.download_urls.wav;
+    if (match?.call_control_id) patch.telnyxCallId = match.call_control_id;
+    const updated = await updateTwenty<AgencyCall>('agencyCalls', call.id, patch);
+    log.info(`Reconciled recording: call=${call.id} rec=${match.id}`);
+    res.json({ attached: true, telnyxRecordingId: match.id, call: mapCall(updated) });
+  } catch (err: any) {
+    log.error("Failed to reconcile recording:", err.message);
+    res.status(500).json({ error: "Failed to reconcile recording", details: err.message });
+  }
+});
+
 // POST /api/calls — log a finished call (recording arrives later via Telnyx webhook)
 router.post("/", async (req: AuthRequest, res) => {
   try {

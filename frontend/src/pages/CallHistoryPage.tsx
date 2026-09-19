@@ -39,16 +39,19 @@ export function CallHistoryPage() {
 
   const filtered = useMemo(() => {
     if (!calls) return [];
-    return calls.filter((call) => {
-      const matchesStatus = statusFilter === "all" || call.status === statusFilter;
-      const q = searchQuery.toLowerCase();
-      const matchesSearch = !q ||
-        (call.toNumber ?? "").includes(q) ||
-        (call.fromNumber ?? "").includes(q) ||
-        (call.summary ?? "").toLowerCase().includes(q) ||
-        recordNameOf(call).toLowerCase().includes(q);
-      return matchesStatus && matchesSearch;
-    });
+    return calls
+      .filter((call) => {
+        const matchesStatus = statusFilter === "all" || call.status === statusFilter;
+        const q = searchQuery.toLowerCase();
+        const matchesSearch = !q ||
+          (call.toNumber ?? "").includes(q) ||
+          (call.fromNumber ?? "").includes(q) ||
+          (call.summary ?? "").toLowerCase().includes(q) ||
+          recordNameOf(call).toLowerCase().includes(q);
+        return matchesStatus && matchesSearch;
+      })
+      // Newest first — the backend returns insertion order, so sort explicitly.
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   }, [calls, statusFilter, searchQuery, leads, prospects]);
 
   if (isLoading) {

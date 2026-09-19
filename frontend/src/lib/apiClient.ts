@@ -181,6 +181,8 @@ export const api = {
       request<any>(`/api/calls/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
     record: (id: string) =>
       request<{ ok: boolean; telnyxRecordingId: string | null }>(`/api/calls/${id}/record`, { method: "POST" }),
+    reconcile: (id: string) =>
+      request<{ attached: boolean }>(`/api/calls/${id}/reconcile`, { method: "POST" }),
   },
 
   twentyMeta: {

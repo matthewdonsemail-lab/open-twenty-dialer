@@ -409,9 +409,6 @@ export function Softphone({ lead, callerId, phoneId, member, prospectId, leadId,
     // Claim the sending number first: another member holding it blocks the dial
     const claimed = await claimNumber();
     if (!claimed) return;
-    // Open the agencyCalls row now (IN_PROGRESS) so the live call has an id
-    // before Telnyx hands us a call-control-id.
-    await ensureCallRow();
 
     setCallState("connecting");
     setDuration(0);
@@ -430,6 +427,11 @@ export function Softphone({ lead, callerId, phoneId, member, prospectId, leadId,
     startedAtRef.current = new Date().toISOString();
     phoneNumberForCallRef.current = phoneNumber;
     setMicrophoneError(null);
+    // Open the agencyCalls row now (IN_PROGRESS) — refs above must be set
+    // first, otherwise the row is created with an empty number and the id is
+    // cleared by the reset. The live call needs an id before Telnyx hands us
+    // a call-control-id.
+    await ensureCallRow();
 
     const sipConfig = getSipConfig();
     sipLog.info("app", "sip config", {
@@ -561,37 +563,14 @@ export function Softphone({ lead, callerId, phoneId, member, prospectId, leadId,
         return;
       }
 
-      // Outgoing invite delegate MUST be set at construction: post-hoc assignment
-      // does not fire onAccept/onReject in SIP.js 0.21 (which is how we lost
-      // the Telnyx call-control-id). Exact SIP codes + Telnyx correlation here.
+      // NOTE: outgoing response callbacks live on requestDelegate passed to
+      // invite() below — neither constructor `delegate` nor post-hoc assignment
+      // fires onAccept/onReject on the Inviter in SIP.js 0.21.
       const inviter = new Inviter(userAgent, target, {
         sessionDescriptionHandlerOptions: {
           constraints: { audio: true, video: false },
         },
         extraHeaders,
-        delegate: {
-          onReject: (response: any) => {
-            const code: number | null = response?.message?.statusCode ?? null;
-            lastSipStatusRef.current = code;
-            const reason: string = response?.message?.reasonPhrase ?? "";
-            sipLog.error("invite", `INVITE rejected: ${code} ${reason}`.trim());
-          },
-          onAccept: (response: any) => {
-            try {
-              const ccid = response?.message?.getHeader?.("X-Telnyx-Call-Control-ID");
-              if (ccid) {
-                telnyxCallControlIdRef.current = String(ccid);
-                sipLog.info("invite", "Telnyx call-control-id captured", { telnyxCallId: String(ccid) });
-                // Answered: a live call-control-id exists — start server recording now
-                void maybeStartServerRecording();
-              } else {
-                sipLog.warn("invite", "200 OK without X-Telnyx-Call-Control-ID header");
-              }
-            } catch {
-              // header read is best-effort
-            }
-          },
-        },
       } as any);
 
       sessionRef.current = inviter;
@@ -638,7 +617,33 @@ export function Softphone({ lead, callerId, phoneId, member, prospectId, leadId,
       });
 
       try {
-        await inviter.invite();
+        // requestDelegate is the documented path for outgoing response
+        // callbacks in SIP.js 0.21 (session.delegate assignment does not fire
+        // onAccept/onReject on the Inviter — which is how we lost the
+        // Telnyx call-control-id). onAccept captures it for server recording.
+        await inviter.invite({
+          requestDelegate: {
+            onAccept: (response: any) => {
+              try {
+                const ccid = response?.message?.getHeader?.("X-Telnyx-Call-Control-ID");
+                if (ccid) {
+                  telnyxCallControlIdRef.current = String(ccid);
+                  sipLog.info("invite", "Telnyx call-control-id captured", { telnyxCallId: String(ccid) });
+                  void maybeStartServerRecording();
+                } else {
+                  sipLog.warn("invite", "200 OK without X-Telnyx-Call-Control-ID header");
+                }
+              } catch {
+                // header read is best-effort
+              }
+            },
+            onReject: (response: any) => {
+              const code: number | null = response?.message?.statusCode ?? null;
+              lastSipStatusRef.current = code;
+              sipLog.error("invite", `INVITE rejected: ${code} ${response?.message?.reasonPhrase ?? ""}`.trim());
+            },
+          },
+        } as any);
         setCallState("ringing");
         sipLog.info("invite", `INVITE sent`, { to: phoneNumber });
       } catch (err: any) {
@@ -735,12 +740,13 @@ export function Softphone({ lead, callerId, phoneId, member, prospectId, leadId,
 
   const handleSaveOutcome = useCallback(async () => {
     // Wrap-up ends the hold: first persist the final disposition onto the call
-    // row (it was stamped at dial/end time with the hangup-time outcome), then
-    // release the number with the finished call attached. Server-side Telnyx
-    // recording lands later via webhook (recordingUrl), never via upload.
+    // row (it was stamped at dial/end time with the hangup-time outcome). If
+    // Telnyx server recording never started (no call-control-id captured),
+    // reconcile against Telnyx by from/to/time window before releasing.
     const callId = callLogIdRef.current;
     if (callId) {
       api.calls.update(callId, { status: mapOutcomeToCallStatus(outcome) }).catch(() => {});
+      api.calls.reconcile(callId).catch(() => {});
     }
     await releaseNumber(callId);
     if (onCallEnd) {
