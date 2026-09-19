@@ -10,11 +10,12 @@ import {
   claimPhone,
   createRecord,
   listRecords,
-  metaOptions,
+  metaFields,
   releasePhone,
   updateRecord,
   type MetaOption,
 } from './api';
+import { FieldCell } from './FieldCell';
 
 type TabId = 'queue' | 'numbers' | 'calls' | 'campaigns' | 'scripts';
 
@@ -261,6 +262,7 @@ function QueueTab(): React.ReactElement {
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
   const [statusOptions, setStatusOptions] = useState<MetaOption[]>([]);
+  const [statusField, setStatusField] = useState<{ type: string; options?: MetaOption[] }>({ type: 'SELECT' });
   const [loggingFor, setLoggingFor] = useState<Record<string, any> | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -282,8 +284,12 @@ function QueueTab(): React.ReactElement {
 
   useEffect(() => {
     void load();
-    void metaOptions('agencyProspect')
-      .then((m) => setStatusOptions(m.coldCallStatus ?? []))
+    void metaFields('agencyProspect')
+      .then((m) => {
+        const options = m.options.coldCallStatus ?? [];
+        setStatusOptions(options);
+        setStatusField({ type: m.types.coldCallStatus ?? 'SELECT', options });
+      })
       .catch(() => undefined);
   }, [load]);
 
@@ -389,20 +395,20 @@ function QueueTab(): React.ReactElement {
                 }}
               >
                 <RecordCheckbox checked={isSel} onChange={(next) => toggleOne(p.id, next)} palette={palette} label={`Select ${String(p.name ?? 'prospect')}`} />
-                <div style={{ width: 220, flexShrink: 0 }}>
-                  <div style={{ fontWeight: 500, fontSize: '13px', color: palette.text }}>{String(p.name ?? '—')}</div>
+                <div style={{ width: 220, flexShrink: 0, fontWeight: 500 }}>
+                  <FieldCell field={{ type: 'TEXT' }} value={p.name} />
                 </div>
                 <div style={{ width: 160, flexShrink: 0, fontSize: '13px', color: palette.textSecondary }}>
-                  {String(p.phone ?? p.phoneNumber ?? '—')}
+                  <FieldCell field={{ type: 'PHONE' }} value={p.phone ?? p.phoneNumber} />
                 </div>
                 <div style={{ width: 140, flexShrink: 0, fontSize: '13px', color: palette.textSecondary }}>
-                  {String(p.niche ?? '—')}
+                  <FieldCell field={{ type: 'TEXT' }} value={p.niche} />
                 </div>
                 <div style={{ width: 90, flexShrink: 0, fontSize: '13px', color: palette.textSecondary }}>
                   {p.rating != null ? `${p.rating} (${p.reviewCount ?? 0})` : '—'}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <SelectDisplay color={metaColor(statusOptions, p.coldCallStatus)} label={metaLabel(statusOptions, p.coldCallStatus)} />
+                  <FieldCell field={statusField} value={p.coldCallStatus} />
                   <CellSelect value={p.coldCallStatus} options={statusOptions} disabled={busyId === p.id} palette={palette} onChange={(v) => void setStatus(p, v)} />
                   <TButton subtle onClick={() => setLoggingFor(loggingFor?.id === p.id ? null : p)}>
                     {loggingFor?.id === p.id ? 'Close' : 'Log call'}
@@ -638,6 +644,7 @@ function CallsTab(): React.ReactElement {
   const [loading, setLoading] = useState(true);
   const [openId, setOpenId] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [callMeta, setCallMeta] = useState<Record<string, { type: string; options?: MetaOption[] }>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -653,6 +660,15 @@ function CallsTab(): React.ReactElement {
 
   useEffect(() => {
     void load();
+    void metaFields('agencyCall')
+      .then((m) => {
+        const c: Record<string, { type: string; options?: MetaOption[] }> = {};
+        for (const f of ['direction', 'status', 'fromNumber', 'toNumber', 'startedAt', 'durationSeconds']) {
+          c[f] = { type: m.types[f] ?? 'TEXT', options: m.options[f] };
+        }
+        setCallMeta(c);
+      })
+      .catch(() => undefined);
   }, [load]);
 
   const allSelected = calls.length > 0 && calls.every((c) => selected.has(c.id));
@@ -717,15 +733,21 @@ function CallsTab(): React.ReactElement {
               }}
             >
               <RecordCheckbox checked={isSel} onChange={(next) => toggleOne(c.id, next)} palette={palette} label={`Select call ${String(c.toNumber ?? c.id)}`} />
-              <div style={{ width: 180, flexShrink: 0, fontSize: '13px', color: palette.textSecondary }}>{fmtDate(c.startedAt ?? c.createdAt)}</div>
-              <div style={{ width: 120, flexShrink: 0, fontSize: '13px', color: palette.text }}>{String(c.direction ?? '—')}</div>
+              <div style={{ width: 180, flexShrink: 0, fontSize: '13px' }}>
+                <FieldCell field={callMeta.startedAt ?? { type: 'DATE_TIME' }} value={c.startedAt ?? c.createdAt} />
+              </div>
+              <div style={{ width: 120, flexShrink: 0, fontSize: '13px' }}>
+                <FieldCell field={callMeta.direction ?? { type: 'TEXT' }} value={c.direction} />
+              </div>
               <div style={{ width: 150, flexShrink: 0 }}>
-                <Status color={statusColor(c.status)}>{String(c.status ?? '—')}</Status>
+                <FieldCell field={callMeta.status ?? { type: 'SELECT', options: [] }} value={c.status} />
               </div>
-              <div style={{ width: 200, flexShrink: 0, fontSize: '13px', color: palette.text }}>
-                {String(c.fromNumber ?? '')} → {String(c.toNumber ?? '—')}
+              <div style={{ width: 200, flexShrink: 0, fontSize: '13px' }}>
+                <FieldCell field={callMeta.fromNumber ?? { type: 'PHONE' }} value={`${c.fromNumber ?? ''} → ${c.toNumber ?? '—'}`} />
               </div>
-              <div style={{ width: 80, flexShrink: 0, fontSize: '13px', color: palette.textSecondary }}>{fmtDuration(c.durationSeconds)}</div>
+              <div style={{ width: 80, flexShrink: 0, fontSize: '13px' }}>
+                <FieldCell field={callMeta.durationSeconds ?? { type: 'NUMBER' }} value={fmtDuration(c.durationSeconds)} />
+              </div>
               <TButton subtle onClick={() => setOpenId(openId === c.id ? null : c.id)}>
                 {openId === c.id ? 'Hide' : 'Show'}
               </TButton>

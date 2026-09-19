@@ -48,8 +48,49 @@ export interface MetaOption {
   color?: string;
 }
 
+// Twenty's native field types (subset the dialer objects use).
+export type FieldType =
+  | 'TEXT'
+  | 'PHONE'
+  | 'RATING'
+  | 'LONG_TEXT'
+  | 'SELECT'
+  | 'MULTI_SELECT'
+  | 'BOOLEAN'
+  | 'NUMBER'
+  | 'CURRENCY'
+  | 'DATE_TIME'
+  | 'DATE'
+  | 'RELATION'
+  | 'EMAILS'
+  | 'DOMAINS'
+  | 'POSITION'
+  | 'URL'
+  | 'JSON'
+  | 'PASSWORD'
+  | 'UNKNOWN';
+
+export interface MetaField {
+  name: string;
+  type: FieldType;
+  label: string;
+  options?: MetaOption[];
+}
+
+export interface Meta {
+  options: Record<string, MetaOption[]>;
+  types: Record<string, string>;
+}
+
+// Full field metadata (types + options) for an object.
+export async function metaFields(object: string): Promise<Meta> {
+  const raw = (await get<Meta>(`/s/dialer/meta/${object}`)) as Meta;
+  return { options: raw.options ?? {}, types: raw.types ?? {} };
+}
+
 export async function metaOptions(object: string): Promise<Record<string, MetaOption[]>> {
-  return (await get<Record<string, MetaOption[]>>(`/s/dialer/meta/${object}`)) as Record<string, MetaOption[]>;
+  const meta = await metaFields(object);
+  return meta.options;
 }
 
 export async function claimPhone(id: string, memberId: string): Promise<Record<string, any>> {

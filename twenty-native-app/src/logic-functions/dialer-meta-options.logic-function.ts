@@ -13,11 +13,13 @@ const handler = async (event: RoutePayload) => {
   const obj = edges.map((e) => e.node).find((o: any) => o.nameSingular === name || o.namePlural === name);
   if (!obj) return err(404, 'unknown object: ' + name);
   const out: Record<string, { label: string; value: string; color?: string }[]> = {};
+  const types: Record<string, string> = {};
   for (const edge of (obj.fields?.edges ?? []) as { node: any }[]) {
     const f = edge.node;
+    if (typeof f?.type === 'string') types[f.name] = f.type;
     if (Array.isArray(f?.options) && f.options.length > 0) out[f.name] = f.options;
   }
-  return ok(out);
+  return ok({ options: out, types });
 };
 
 export default defineLogicFunction({
