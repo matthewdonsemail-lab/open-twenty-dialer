@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { authMiddleware, AuthRequest } from "../middleware/auth.js";
 import { listTwentyAll, createTwenty, updateTwenty, getTwenty } from "../lib/twenty-client.js";
+import { telnyxClient, telnyxErrorMessage } from "../lib/telnyx.js";
 import { createLogger } from "../lib/logger.js";
 
 const router = Router();
@@ -101,22 +102,22 @@ router.get("/:id/audio", async (req, res) => {
       res.status(404).json({ error: "No Telnyx recording for this call yet" });
       return;
     }
-    const apiKey = process.env.TELNYX_API_KEY;
-    if (!apiKey) {
-      res.status(500).json({ error: "TELNYX_API_KEY not configured" });
+    let tx;
+    try {
+      tx = telnyxClient();
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
       return;
     }
-    const r = await fetch(
-      `https://api.telnyx.com/v2/recordings/${encodeURIComponent(call.telnyxRecordingId)}`,
-      { headers: { Authorization: `Bearer ${apiKey}` } }
-    );
-    if (!r.ok) {
-      log.info(`Telnyx recording lookup failed: ${r.status}`);
+    let retrieved: any;
+    try {
+      retrieved = await tx.recordings.retrieve(call.telnyxRecordingId);
+    } catch (err: any) {
+      log.info(`Telnyx recording lookup failed: ${telnyxErrorMessage(err)}`);
       res.status(502).json({ error: "Telnyx recording lookup failed" });
       return;
     }
-    const j: any = await r.json();
-    const url = j?.data?.download_urls?.mp3 || j?.data?.download_urls?.wav;
+    const url = retrieved?.data?.download_urls?.mp3 || retrieved?.data?.download_urls?.wav;
     if (!url) {
       res.status(404).json({ error: "Recording has no download URL yet" });
       return;
@@ -138,30 +139,27 @@ router.post("/:id/record", async (req, res) => {
       res.status(400).json({ error: "Call has no telnyxCallId yet (not answered?)" });
       return;
     }
-    const apiKey = process.env.TELNYX_API_KEY;
-    if (!apiKey) {
-      res.status(500).json({ error: "TELNYX_API_KEY not configured" });
-      return;
-    }
-    const r = await fetch(
-      `https://api.telnyx.com/v2/calls/${encodeURIComponent(call.telnyxCallId)}/actions/record_start`,
-      {
-        method: "POST",
-        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ format: "mp3", channels: "dual", transcription: true }),
-      }
-    );
-    const text = await r.text();
-    if (!r.ok) {
-      log.info(`Telnyx record_start failed: ${r.status} ${text.slice(0, 200)}`);
-      res.status(502).json({ error: "Telnyx record_start failed", details: text.slice(0, 200) });
-      return;
-    }
-    let recordingId: string | null = null;
+    let tx;
     try {
-      const j: any = JSON.parse(text);
-      recordingId = j?.data?.recording_id || j?.data?.id || null;
-    } catch { /* non-JSON; ignore */ }
+      tx = telnyxClient();
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+      return;
+    }
+    let started: any;
+    try {
+      started = await tx.calls.actions.startRecording(call.telnyxCallId, {
+        format: "mp3",
+        channels: "dual",
+        transcription: true,
+      } as any);
+    } catch (err: any) {
+      log.info(`Telnyx record_start failed: ${telnyxErrorMessage(err)}`);
+      res.status(502).json({ error: "Telnyx record_start failed", details: telnyxErrorMessage(err) });
+      return;
+    }
+    const recordingId: string | null =
+      started?.data?.recording_id || started?.data?.id || null;
     if (recordingId) {
       try {
         await updateTwenty<AgencyCall>('agencyCalls', call.id, {
@@ -190,24 +188,28 @@ router.post("/:id/reconcile", async (req, res) => {
       res.json({ attached: true, already: true });
       return;
     }
-    const apiKey = process.env.TELNYX_API_KEY;
-    if (!apiKey) {
-      res.status(500).json({ error: "TELNYX_API_KEY not configured" });
+    let tx;
+    try {
+      tx = telnyxClient();
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
       return;
     }
     const since = new Date(new Date(call.createdAt || Date.now()).getTime() - 15 * 60_000).toISOString();
-    const params = new URLSearchParams({ "page[size]": "25", "sort": "-created_at" });
-    if (call.fromNumber) params.set("filter[from]", call.fromNumber);
-    if (call.toNumber) params.set("filter[to]", call.toNumber);
-    const r = await fetch(`https://api.telnyx.com/v2/recordings?${params.toString()}`, {
-      headers: { Authorization: `Bearer ${apiKey}` },
-    });
-    if (!r.ok) {
-      res.status(502).json({ error: "Telnyx recordings lookup failed" });
+    let items: any[] = [];
+    try {
+      const page: any = await tx.recordings.list({
+        filter: {
+          ...(call.fromNumber ? { from: call.fromNumber } : {}),
+          ...(call.toNumber ? { to: call.toNumber } : {}),
+        },
+      } as any);
+      items = page?.data ?? [];
+    } catch (err: any) {
+      res.status(502).json({ error: "Telnyx recordings lookup failed", details: telnyxErrorMessage(err) });
       return;
     }
-    const j: any = await r.json();
-    const match = (j?.data || []).find((rec: any) =>
+    const match = items.find((rec: any) =>
       rec?.status === "completed" && (!rec?.created_at || rec.created_at >= since)
     );
     if (!match) {

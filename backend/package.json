@@ -21,6 +21,7 @@
     "multer": "^1.4.5-lts.1",
     "papaparse": "^5.4.1",
     "pg": "^8.23.0",
+    "telnyx": "^7.21.0",
     "uuid": "^11.0.0"
   },
   "devDependencies": {
