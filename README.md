@@ -44,12 +44,14 @@ flowchart TB
         LeadsPage[Leads Page]
         CampaignsPage[Campaigns Page]
         Softphone[Softphone UI]
+        CallHistory[Call History]
     end
 
     subgraph backend [Backend - Express/TypeScript]
         API[REST API]
         TwentyClient[Twenty Client]
         Auth[Auth Middleware]
+        TelnyxLib[Telnyx SDK Client]
     end
 
     subgraph twenty [Twenty CRM]
@@ -57,20 +59,36 @@ flowchart TB
         agencyLeads[agencyLeads]
         agencyCampaigns[agencyCampaigns]
         agencyScripts[agencyScripts]
+        agencyPhones[agencyPhones]
+        agencyCalls[agencyCalls]
         Metadata[Metadata API]
+    end
+
+    subgraph telnyx [Telnyx]
+        SIP[SIP Trunking]
+        VoiceAPI[Call Control + Recordings]
+        Webhooks[Voice Webhooks]
     end
 
     ProspectsPage -->|HTTP| API
     LeadsPage -->|HTTP| API
     CampaignsPage -->|HTTP| API
-    Softphone -->|SIP/WebRTC| Provider[SIP Provider]
+    CallHistory -->|HTTP| API
+    Softphone -->|SIP/WebRTC| SIP
+    Softphone -->|claim/release| API
 
     API -->|CRUD| TwentyClient
+    API -->|record/reconcile| TelnyxLib
     TwentyClient -->|REST API| agencyProspects
     TwentyClient -->|REST API| agencyLeads
     TwentyClient -->|REST API| agencyCampaigns
     TwentyClient -->|REST API| agencyScripts
+    TwentyClient -->|REST API| agencyPhones
+    TwentyClient -->|REST API| agencyCalls
     TwentyClient -->|Metadata| Metadata
+    TelnyxLib -->|record_start + recordings| VoiceAPI
+    Webhooks -->|recording/transcript saved| Receiver[Vercel Receiver]
+    Receiver -->|attach recording| agencyCalls
 ```
 
 ### Data Flow
@@ -86,6 +104,30 @@ User Action (Prospect/Lead/Campaign)
          ↓
     Twenty CRM (REST API)
 ```
+
+### Call Flow (dial → talk → log → recording)
+
+```
+Dial → POST /api/twenty/phones/:id/claim (409 if held)
+  → agencyCalls row created (IN_PROGRESS)
+  → SIP INVITE via Telnyx (wss://sip.telnyx.com:7443)
+  → 200 OK: capture X-Telnyx-Call-Control-ID
+  → POST /api/calls/:id/record (Telnyx record_start + transcription)
+  → state ACTIVE → talk → BYE → row COMPLETED + debugLog
+  → Save disposition → PATCH status → POST /api/twenty/phones/:id/release
+  → Telnyx call.recording.saved → Vercel receiver attaches mp3
+  → call.recording.transcription.saved → transcript attached
+  → play any time via GET /api/calls/:id/audio (fresh Telnyx URL, key stays server-side)
+```
+
+### Deployments
+
+| Piece | Where | Notes |
+|---|---|---|
+| SPA (+ Telnyx webhook receiver) | Vercel (`open-twenty-dialer`) | Auto-deploys on push to `main`. Needs project envs: `VITE_API_URL`, `VITE_SIP_*`, `TWENTY_BASE_URL`, `TWENTY_API_KEY`, `TELNYX_WEBHOOK_TOKEN`. `VITE_*` bake in at build time. |
+| Express backend | node01 Docker (`dialer-backend`), public via Tailscale Funnel | `~/services/dialer` on node01, same repo. Needs `TWENTY_*`, `TELNYX_API_KEY`, `JWT_SECRET` in its `.env`. |
+| Self-contained app | Railcode (`cold-dialer`) | Hono worker + UI in `cold-dialer/`, mirrors the Express routes. |
+| Telnyx wiring | Mission Control | Number → messaging profile + voice connection; connection `webhook_event_url` → Vercel receiver; `conversation_persistence: true` for transcripts. |
 
 ---
 
@@ -240,6 +282,57 @@ Call scripts linked to campaigns.
 | `scriptData` | TEXT | JSON with script content + objection responses |
 | `campaignId` | RELATION | Link to agencyCampaign (uses `campaignIdId` in REST API) |
 
+### agencyPhones
+
+Sending numbers (Telnyx inventory mirrored into Twenty). One member holds a
+number for the duration of a call — enforced by claim endpoints, visible live
+in the dial UI and on Phone Numbers.
+
+**Key Fields:**
+| Field | Type | Description |
+|-------|------|-------------|
+| `phoneNumber` | TEXT | E.164 number |
+| `name` | TEXT | Display name (e.g. "ListeningKit Philly") |
+| `countryCode` | TEXT | ISO alpha-2 (IE/US) |
+| `numberType` | SELECT | LONG_CODE / TOLL_FREE / SHORT_CODE |
+| `state` | SELECT | ACTIVE / PAUSED / DEGRADED / RETIRED (provisioning) |
+| `messagingProfileId` | TEXT | Telnyx messaging profile for SMS |
+| `callState` | SELECT | **Claim state:** IDLE / DIALING / ACTIVE |
+| `claimedByMemberId` | TEXT | Twenty user id holding the number |
+| `claimedByEmail` | TEXT | Holder email (shown in UI) |
+| `claimedAt` | DATE_TIME | When the claim started |
+| `currentCallId` | TEXT | Latest agencyCalls row for traceability |
+| `lastSyncedAt` | TEXT | Last backend sync timestamp |
+
+Claim protocol: `claim` (IDLE → DIALING, 409 `heldBy` when taken) →
+`state` (DIALING → ACTIVE on SIP Established) → `release` (→ IDLE, holder-only
+unless `force`). Same member may re-claim (idempotent redial).
+
+### agencyCalls
+
+One row per dialed call, from first ring to wrap-up and beyond.
+
+**Key Fields:**
+| Field | Type | Description |
+|-------|------|-------------|
+| `direction` | SELECT | INBOUND / OUTBOUND / MISSED |
+| `status` | SELECT | IN_PROGRESS / COMPLETED / FAILED / NO_ANSWER / BUSY |
+| `fromNumber` / `toNumber` | TEXT | E.164 parties |
+| `startedAt` / `endedAt` | DATE_TIME | Call window |
+| `durationSeconds` | NUMBER | Talk time |
+| `telnyxCallId` | TEXT | Telnyx call-control-id (captured from 200 OK) |
+| `telnyxRecordingId` | TEXT | Telnyx recording id |
+| `recordingUrl` | TEXT | Last known mp3 URL (expires — play via `/api/calls/:id/audio`) |
+| `transcript` | TEXT | Telnyx transcription |
+| `transcriptionStatus` | SELECT | NONE / PENDING / READY / FAILED |
+| `summary` | TEXT | Agent/AI notes |
+| `debugLog` | TEXT | SIP event trail JSON (post-mortem) |
+| `meetingUrl` / `meetingProvider` / `meetingAt` / `meetingStatus` / `meetingBookingId` | TEXT / SELECT / DATE_TIME / SELECT / TEXT | Future meeting booked from the call |
+| `agencyPhone` / `agencyProspect` / `agencyLead` | RELATION | MANY_TO_ONE links (write via `agencyPhoneId` etc.) |
+
+> Relations via REST metadata must be created with `POST /rest/metadata/fields`
+> (the GraphQL path rejects `relationCreationPayload`).
+
 ---
 
 ## Relations Between Objects
@@ -247,6 +340,18 @@ Call scripts linked to campaigns.
 ### Campaign Relations
 
 All three custom objects (`agencyProspects`, `agencyLeads`, `agencyScripts`) can be linked to campaigns via the `campaignId` relation field.
+
+### Call Relations
+
+Each `agencyCalls` row links to the number used plus the record dialed:
+
+```typescript
+// At dial time (row created IN_PROGRESS):
+{ agencyPhoneId: "<agencyPhones id>", agencyProspectId: "<id>" /* or agencyLeadId */ }
+
+// After answer (correlation for recordings + webhooks):
+{ telnyxCallId: "v3:..." }
+```
 
 **Important:** Twenty uses the `{fieldName}Id` pattern for relation fields in REST API operations:
 
@@ -406,8 +511,10 @@ Create `.env.local` in the respective directory:
 TWENTY_BASE_URL=https://twenty.inferencesaver.com
 TWENTY_API_KEY=your-api-key-here
 
-# Twenty Postgres — for user verification
-TWENTY_DATABASE_URL=postgres://dialer_ro:your-password@node01:5432/twenty
+# Twenty Postgres — for user verification (local dev goes through the SSH
+# tunnel because the tailnet ACL blocks direct 5432: localhost:5433 -> node01)
+# Tunnel: ssh -L 5433:localhost:5432 -N deepman@100.98.241.63
+TWENTY_DATABASE_URL=postgres://twenty:xxx@127.0.0.1:5433/twenty
 
 # Sync settings
 SYNC_POLL_INTERVAL_MS=30000
@@ -415,14 +522,27 @@ SYNC_POLL_INTERVAL_MS=30000
 # Backend
 PORT=4000
 JWT_SECRET=your-jwt-secret-here
+
+# Telnyx (SMS/Voice/Call Control — server-side only, never VITE_)
+TELNYX_API_KEY=...
+TELNYX_MESSAGING_PROFILE_ID=...
+TELNYX_MESSAGING_PROFILE_US=...
+TELNYX_WEBHOOK_TOKEN=...   # shared gate for the Vercel receiver (?token=)
+
+# Twenty member login (local testing + scripts)
+TWENTY_USER_EMAIL=...
+TWENTY_USER_PASSWORD=...
 ```
 
 **Frontend (.env.local):**
 ```env
 VITE_API_URL=http://localhost:4000
-VITE_SIP_URI=sip:your-extension@your-domain.sip.signalwire.com
-VITE_SIP_PASSWORD=your-password
-VITE_SIP_WS_URL=wss://your-domain.sip.signalwire.com
+# Telnyx SIP (baked into the SPA bundle at build time)
+VITE_SIP_URI=sip:username@sip.telnyx.com
+VITE_SIP_PASSWORD=your-sip-password
+VITE_SIP_WS_URL=wss://sip.telnyx.com:7443
+VITE_SIP_CALLER_ID=+1XXXXXXXXXX
+VITE_SIP_PROVIDER=telnyx
 ```
 
 ### SIP Configuration
@@ -525,7 +645,30 @@ open-twenty-dialer/
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/twenty/meta/:object` | Get field metadata for object |
-| GET | `/api/twenty/phones` | List available phone numbers |
+| GET | `/api/twenty/phones` | List available phone numbers (with live claim state) |
+| POST | `/api/twenty/phones/:id/claim` | Claim a number (`memberId`, `memberEmail`; 409 `heldBy` when taken) |
+| POST | `/api/twenty/phones/:id/state` | Set DIALING/ACTIVE (holder only) |
+| POST | `/api/twenty/phones/:id/release` | Release to IDLE (holder only, unless `force`) |
+
+### Calls
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/calls` | List calls, newest first |
+| GET | `/api/calls/:id` | Get single call |
+| POST | `/api/calls` | Log a call (creates `agencyCalls` row) |
+| PATCH | `/api/calls/:id` | Update (disposition, recording, transcript, meeting link, debugLog) |
+| POST | `/api/calls/:id/record` | Start Telnyx server recording + transcription |
+| POST | `/api/calls/:id/reconcile` | Match Telnyx recording by from/to/time when no call-control-id |
+| GET | `/api/calls/:id/audio` | Redirect to a fresh Telnyx mp3 (key stays server-side) |
+
+### Diagnostics
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/health` | Health + Twenty config flags |
+| GET | `/api/netcheck?host=&port=` | SIP reachability probe (allowlisted hosts only) |
+| POST | `/api/telnyx-webhook?token=` | Telnyx events (Vercel serverless, not Express) |
 
 ---
 
