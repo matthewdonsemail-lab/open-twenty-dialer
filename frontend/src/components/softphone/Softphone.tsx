@@ -12,10 +12,17 @@ import {
   Radio,
 } from "lucide-react";
 import { getSipConfig, isSipConfigured, getSipDomain, getSipExtension } from "@/sip";
+import { sipLog, classifyFailure, getReport, type ClassifiedFailure } from "@/sip";
 import { Button } from "@/components/ui/Button";
 import { OutcomeSelect } from "@/components/common/OutcomeSelect";
 import { api } from "@/lib/apiClient";
 import type { Database } from "@/types/database";
+
+// Explicit opt-in only: simulated calls NEVER happen silently. Ordinary dials
+// fail loudly with the classified reason instead.
+const SIMULATE_CALLS =
+  typeof window !== "undefined" &&
+  new URLSearchParams(window.location.search).get("simulate") === "1";
 
 type Lead = Database["public"]["Tables"]["leads"]["Row"];
 
@@ -69,6 +76,8 @@ export function Softphone({ lead, callerId, phoneId, member, prospectId, leadId,
   const [isRecording, setIsRecording] = useState(false);
   const [recordingError, setRecordingError] = useState<string | null>(null);
   const [microphoneError, setMicrophoneError] = useState<string | null>(null);
+  const [fatalError, setFatalError] = useState<ClassifiedFailure | null>(null);
+  const [diagCopied, setDiagCopied] = useState(false);
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const sessionRef = useRef<any>(null);
@@ -81,6 +90,10 @@ export function Softphone({ lead, callerId, phoneId, member, prospectId, leadId,
   const uploadedRecordingUrlRef = useRef<string | null>(null);
   const startedAtRef = useRef<string | null>(null);
   const phoneNumberForCallRef = useRef<string>("");
+  const telnyxCallControlIdRef = useRef<string | null>(null);
+  const lastSipStatusRef = useRef<number | null>(null);
+  const transportTimedOutRef = useRef(false);
+  const lastFailureRef = useRef<ClassifiedFailure | null>(null);
 
   // Audio refs
   const remoteAudioRef = useRef<HTMLAudioElement>(null);
@@ -218,6 +231,7 @@ export function Softphone({ lead, callerId, phoneId, member, prospectId, leadId,
         startedAt: startedAtRef.current || undefined,
         endedAt: new Date().toISOString(),
         durationSeconds: finalDuration,
+        telnyxCallId: telnyxCallControlIdRef.current || undefined,
         agencyPhoneId: holdRef.current?.phoneId || phoneId || undefined,
         agencyProspectId: prospectId || undefined,
         agencyLeadId: leadId || undefined,
@@ -227,10 +241,17 @@ export function Softphone({ lead, callerId, phoneId, member, prospectId, leadId,
       if (uploadedRecordingUrlRef.current && callLogIdRef.current) {
         api.calls.update(callLogIdRef.current, { recordingUrl: uploadedRecordingUrlRef.current }).catch(() => {});
       }
+      // Attach the SIP event trail for post-mortem (server log + Call History detail)
+      if (callLogIdRef.current) {
+        const report = getReport(getSipConfig(), lastFailureRef.current ?? {
+          kind: "NONE", title: "No failure", detail: "Call ended without a classified failure.", hint: "",
+        }, telnyxCallControlIdRef.current);
+        api.calls.update(callLogIdRef.current, { debugLog: JSON.stringify(report).slice(0, 8000) }).catch(() => {});
+      }
     } catch (err) {
       console.error("Failed to log call to agencyCalls:", err);
     }
-  }, [callerId, phoneId, prospectId, leadId, lead?.id]);
+  }, [callerId, phoneId, prospectId, leadId]);
 
   // Recording functions
   const startRecording = useCallback(() => {
@@ -332,7 +353,21 @@ export function Softphone({ lead, callerId, phoneId, member, prospectId, leadId,
     }
   }, [lead?.id]);
 
+  // Loud terminal failure: banner + console + agencyCalls row + release.
+  // There is deliberately NO silent fallback — a failed dial must say why.
+  const failLoud = useCallback(async (failure: ClassifiedFailure) => {
+    lastFailureRef.current = failure;
+    setFatalError(failure);
+    setDiagCopied(false);
+    sipLog.error("app", `CALL FAILED: ${failure.title}`, { kind: failure.kind, detail: failure.detail });
+    await finalizeCall("failed", durationRef.current, directionRef.current);
+    await releaseNumber(callLogIdRef.current);
+    setCallState("ended");
+  }, [finalizeCall, releaseNumber]);
+
+  // Dev-only UI walkthrough (?simulate=1). Never runs silently.
   const startSimulatedCall = useCallback(() => {
+    sipLog.warn("app", "SIMULATED call (?simulate=1) — no SIP traffic");
     setCallState("connecting");
     setTimeout(() => setCallState("ringing"), 1500);
     setTimeout(() => setCallState("active"), 4000);
@@ -342,6 +377,10 @@ export function Softphone({ lead, callerId, phoneId, member, prospectId, leadId,
     if (!phoneNumber) return;
 
     setClaimError(null);
+    setFatalError(null);
+    lastFailureRef.current = null;
+    sipLog.clear();
+    sipLog.info("app", `dial requested`, { to: phoneNumber, phoneId: phoneId ?? null });
     // Claim the sending number first: another member holding it blocks the dial
     const claimed = await claimNumber();
     if (!claimed) return;
@@ -353,24 +392,55 @@ export function Softphone({ lead, callerId, phoneId, member, prospectId, leadId,
     wasEstablishedRef.current = false;
     callLogIdRef.current = null;
     uploadedRecordingUrlRef.current = null;
+    telnyxCallControlIdRef.current = null;
+    lastSipStatusRef.current = null;
+    transportTimedOutRef.current = false;
     startedAtRef.current = new Date().toISOString();
     phoneNumberForCallRef.current = phoneNumber;
     setMicrophoneError(null);
     setRecordingError(null);
 
     const sipConfig = getSipConfig();
+    sipLog.info("app", "sip config", {
+      uri: sipConfig.uri, wsUrl: sipConfig.wsUrl,
+      callerId: sipConfig.callerId, provider: sipConfig.provider,
+    });
 
     if (!isSipConfigured()) {
-      console.warn("SIP not configured, using simulated call");
-      startSimulatedCall();
+      if (SIMULATE_CALLS) {
+        startSimulatedCall();
+        return;
+      }
+      await failLoud(classifyFailure({ notConfigured: true }));
       return;
+    }
+
+    // Pre-flight: is the WS host:port reachable before burning 8s on timeout?
+    try {
+      const u = new URL(sipConfig.wsUrl);
+      sipLog.info("netcheck", `probing ${u.hostname}:${u.port || "443"}`);
+      const probe = await api.net.check(u.hostname, u.port || "443");
+      sipLog.info("netcheck", `probe result`, probe as Record<string, unknown>);
+      if (!probe?.ok) {
+        await failLoud(classifyFailure({ wsCloseCode: 1006, wsUrl: sipConfig.wsUrl }));
+        return;
+      }
+    } catch (err: any) {
+      sipLog.warn("netcheck", `probe failed (${err?.message || err}); dialling anyway`);
     }
 
     try {
       const { UserAgent, Registerer, Inviter, SessionState } = await import("sip.js");
 
       // Get local mic stream first
-      const localStream = await getLocalStream();
+      let localStream: MediaStream;
+      try {
+        localStream = await getLocalStream();
+      } catch {
+        await failLoud(classifyFailure({ micDenied: true }));
+        return;
+      }
+      void localStream;
 
       const domain = getSipDomain();
       const target = UserAgent.makeURI(`sip:${phoneNumber}@${domain}`);
@@ -416,7 +486,25 @@ export function Softphone({ lead, callerId, phoneId, member, prospectId, leadId,
           setCallState("ringing");
           setDirection("inbound");
         },
+        onConnect: () => {
+          sipLog.info("transport", "userAgent connected (transport up)");
+        },
+        onDisconnect: (error?: Error) => {
+          sipLog.error("transport", `userAgent disconnected${error?.message ? `: ${error.message}` : ""}`);
+        },
       };
+
+      // Best-effort transport state trail (object shape varies by sip.js build)
+      try {
+        const transport: any = (userAgent as any).transport;
+        if (transport?.stateChange?.addListener) {
+          transport.stateChange.addListener((state: string) => {
+            sipLog.info("transport", `transport -> ${state}`);
+          });
+        }
+      } catch {
+        // non-fatal: delegate events still cover the story
+      }
 
       const registerer = new Registerer(userAgent);
 
@@ -424,8 +512,23 @@ export function Softphone({ lead, callerId, phoneId, member, prospectId, leadId,
         setTimeout(() => reject(new Error("SIP connection timeout")), 8000)
       );
 
-      await Promise.race([userAgent.start(), connectionTimeout]);
-      await Promise.race([registerer.register(), connectionTimeout]);
+      try {
+        await Promise.race([userAgent.start(), connectionTimeout]);
+      } catch {
+        transportTimedOutRef.current = true;
+        sipLog.error("transport", "userAgent.start() timed out after 8s", { wsUrl: sipConfig.wsUrl });
+        await failLoud(classifyFailure({ timedOut: true, wsUrl: sipConfig.wsUrl }));
+        return;
+      }
+      try {
+        await Promise.race([registerer.register(), connectionTimeout]);
+        sipLog.info("register", "REGISTER accepted");
+      } catch {
+        transportTimedOutRef.current = true;
+        sipLog.error("register", "register() timed out after 8s");
+        await failLoud(classifyFailure({ timedOut: true, wsUrl: sipConfig.wsUrl }));
+        return;
+      }
 
       const inviter = new Inviter(userAgent, target, {
         sessionDescriptionHandlerOptions: {
@@ -433,6 +536,31 @@ export function Softphone({ lead, callerId, phoneId, member, prospectId, leadId,
         },
         extraHeaders,
       } as any);
+
+      // Exact SIP response codes + Telnyx call-control correlation
+      try {
+        (inviter as any).delegate = {
+          onReject: (response: any) => {
+            const code: number | null = response?.message?.statusCode ?? null;
+            lastSipStatusRef.current = code;
+            const reason: string = response?.message?.reasonPhrase ?? "";
+            sipLog.error("invite", `INVITE rejected: ${code} ${reason}`.trim());
+          },
+          onAccept: (response: any) => {
+            try {
+              const ccid = response?.message?.getHeader?.("X-Telnyx-Call-Control-ID");
+              if (ccid) {
+                telnyxCallControlIdRef.current = String(ccid);
+                sipLog.info("invite", "Telnyx call-control-id captured", { telnyxCallId: String(ccid) });
+              }
+            } catch {
+              // header read is best-effort
+            }
+          },
+        };
+      } catch {
+        // delegate assignment is best-effort; state machine below still runs
+      }
 
       sessionRef.current = inviter;
 
@@ -453,7 +581,7 @@ export function Softphone({ lead, callerId, phoneId, member, prospectId, leadId,
           setCallState("active");
           setOutcome("answered");
           setPhoneActive();
-          console.log("Call established - starting recording");
+          sipLog.info("session", "call established — starting recording");
           // Start recording once call is established
           setTimeout(() => startRecording(), 500);
         } else if (state === SessionState.Terminated) {
@@ -461,20 +589,50 @@ export function Softphone({ lead, callerId, phoneId, member, prospectId, leadId,
             setOutcome("no_answer");
           }
           setCallState("ended");
-          console.log("Call terminated");
+          sipLog.info("session", "call terminated", {
+            established: wasEstablishedRef.current,
+            lastSipStatus: lastSipStatusRef.current,
+          });
+          // Never-established + observed SIP failure (or transport loss) => loud banner
+          if (!wasEstablishedRef.current && !callLogIdRef.current) {
+            const failure = classifyFailure({
+              sipStatusCode: lastSipStatusRef.current,
+              timedOut: transportTimedOutRef.current || undefined,
+              wsUrl: getSipConfig().wsUrl,
+            });
+            if (failure.kind !== "UNKNOWN") {
+              lastFailureRef.current = failure;
+              setFatalError(failure);
+              sipLog.error("app", `CALL FAILED: ${failure.title}`, { kind: failure.kind });
+            }
+          }
           void finalizeCall(outcomeRef.current, durationRef.current, directionRef.current);
         } else if (state === SessionState.Establishing) {
           setCallState("ringing");
+          sipLog.info("session", "establishing (ringing)");
         }
       });
 
-      await inviter.invite();
-      setCallState("ringing");
-    } catch (err) {
-      console.warn("SIP.js call failed, using simulated call:", err);
-      startSimulatedCall();
+      try {
+        await inviter.invite();
+        setCallState("ringing");
+        sipLog.info("invite", `INVITE sent`, { to: phoneNumber });
+      } catch (err: any) {
+        sipLog.error("invite", `invite() threw: ${err?.message || err}`);
+        await failLoud(classifyFailure({
+          sipStatusCode: lastSipStatusRef.current,
+          timedOut: transportTimedOutRef.current || undefined,
+          wsUrl: sipConfig.wsUrl,
+        }));
+        return;
+      }
+    } catch (err: any) {
+      // Anything unexpected on the dial path fails loudly — never silently simulates.
+      sipLog.error("app", `dial path threw: ${err?.message || err}`);
+      await failLoud(classifyFailure({ wsUrl: getSipConfig().wsUrl }));
+      return;
     }
-  }, [phoneNumber, callerId, startSimulatedCall, getLocalStream, claimNumber]);
+  }, [phoneNumber, callerId, startSimulatedCall, getLocalStream, claimNumber, failLoud]);
 
   const endCall = useCallback(async () => {
     // Stop recording if active
@@ -570,6 +728,8 @@ export function Softphone({ lead, callerId, phoneId, member, prospectId, leadId,
     setDirection("outbound");
     setIsRecording(false);
     setClaimError(null);
+    setFatalError(null);
+    lastFailureRef.current = null;
     callLogIdRef.current = null;
     uploadedRecordingUrlRef.current = null;
     startedAtRef.current = null;
@@ -719,6 +879,30 @@ export function Softphone({ lead, callerId, phoneId, member, prospectId, leadId,
           {claimError && (
             <div className="bg-amber-500/10 border border-amber-500/20 rounded-ods-sm p-2 text-[11px] text-amber-700">
               Number in use — {claimError}. It releases when the holder wraps up.
+            </div>
+          )}
+
+          {/* Loud call failure: exact reason + one-click diagnostics */}
+          {fatalError && (
+            <div className="bg-red-500/10 border border-red-500/30 rounded-ods-sm p-2.5 text-[11px] text-red-700 flex flex-col gap-1.5">
+              <p className="font-semibold text-[12px]">Call failed: {fatalError.title}</p>
+              <p className="text-red-600">{fatalError.detail}</p>
+              <p className="text-[11px] text-red-600/80">Fix: {fatalError.hint}</p>
+              <button
+                onClick={async () => {
+                  const report = getReport(getSipConfig(), fatalError, telnyxCallControlIdRef.current);
+                  try {
+                    await navigator.clipboard.writeText(JSON.stringify(report, null, 2));
+                    setDiagCopied(true);
+                    setTimeout(() => setDiagCopied(false), 2000);
+                  } catch {
+                    console.error("[sip] clipboard failed", report);
+                  }
+                }}
+                className="self-start mt-0.5 px-2 py-1 rounded-[4px] border border-red-500/40 text-[11px] font-medium hover:bg-red-500/10 transition-colors"
+              >
+                {diagCopied ? "Copied ✓" : "Copy diagnostics"}
+              </button>
             </div>
           )}
 

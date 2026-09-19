@@ -24,6 +24,7 @@ interface AgencyCall {
   transcript?: string;
   transcriptionStatus?: string;
   summary?: string;
+  debugLog?: string;
   meetingUrl?: string;
   meetingProvider?: string;
   meetingAt?: string;
@@ -54,6 +55,7 @@ function mapCall(call: AgencyCall) {
     transcript: call.transcript || null,
     transcriptionStatus: call.transcriptionStatus || null,
     summary: call.summary || null,
+    debugLog: call.debugLog || null,
     meetingUrl: call.meetingUrl || null,
     meetingProvider: call.meetingProvider || null,
     meetingAt: call.meetingAt || null,
@@ -125,7 +127,12 @@ router.post("/", async (req: AuthRequest, res) => {
     if (agencyLeadId) payload.agencyLeadId = agencyLeadId;
 
     const created = await createTwenty<AgencyCall>('agencyCalls', payload);
-    log.info(`Call logged: ${created.id} ${payload.direction} ${toNumber}`);
+    log.info(
+      `Call logged: ${created.id} ${payload.direction} ${payload.fromNumber || "?"} -> ${toNumber} ` +
+      `status=${payload.status} dur=${payload.durationSeconds}s ` +
+      `telnyx=${payload.telnyxCallId || "-"} phone=${payload.agencyPhoneId || "-"} ` +
+      `prospect=${payload.agencyProspectId || "-"} lead=${payload.agencyLeadId || "-"}`
+    );
 
     // Point the phone row at its latest call (traceability; claim stays until release)
     if (agencyPhoneId) {
@@ -148,7 +155,7 @@ router.patch("/:id", async (req, res) => {
   try {
     const allowed = [
       "status", "endedAt", "durationSeconds", "telnyxRecordingId", "recordingUrl",
-      "transcript", "transcriptionStatus", "summary",
+      "transcript", "transcriptionStatus", "summary", "debugLog",
       "meetingUrl", "meetingProvider", "meetingAt", "meetingStatus", "meetingBookingId",
     ] as const;
     const patch: Record<string, unknown> = {};

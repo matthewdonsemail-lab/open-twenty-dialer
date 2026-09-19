@@ -203,6 +203,15 @@ export function CallDetailPage() {
           </p>
         </WidgetCard>
 
+        {/* Diagnostics (SIP event trail for post-mortem) */}
+        {call.debugLog && (
+          <WidgetCard title="Diagnostics" icon={FileText}>
+            <pre className="text-[11px] text-[var(--ods-text-secondary)] whitespace-pre-wrap max-h-64 overflow-y-auto font-mono">
+              {call.debugLog.slice(0, 4000)}
+            </pre>
+          </WidgetCard>
+        )}
+
         {/* Technical Details */}
         <WidgetCard title="Technical Details" icon={Clock}>
           <dl className="flex flex-col gap-[var(--ods-sp-3)]">

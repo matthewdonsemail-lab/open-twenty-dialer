@@ -15,6 +15,11 @@ interface AgencyPhone {
   status: string;
   created_at: string;
   updated_at: string;
+  callState?: string | null;
+  claimedByMemberId?: string | null;
+  claimedByEmail?: string | null;
+  claimedAt?: string | null;
+  currentCallId?: string | null;
 }
 
 export function PhoneNumbersPage() {
@@ -23,7 +28,10 @@ export function PhoneNumbersPage() {
     queryFn: async () => {
       return api.twentyPhones.list();
     },
-    staleTime: Infinity,
+    // Holder state is live: poll so a member grabbing a number shows up here
+    staleTime: 10_000,
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: true,
   });
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -96,13 +104,14 @@ export function PhoneNumbersPage() {
               <th className="px-3 text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-secondary)]">State</th>
               <th className="px-3 text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-secondary)]">Country</th>
               <th className="px-3 text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-secondary)]">Status</th>
+              <th className="px-3 text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-secondary)]">Holder</th>
               <th className="px-3 text-[11px] font-medium uppercase tracking-wider text-[var(--ods-text-secondary)]">Created</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--ods-border)]">
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={7} className="text-center py-8 text-[13px] text-[var(--ods-text-secondary)]">
+                <td colSpan={8} className="text-center py-8 text-[13px] text-[var(--ods-text-secondary)]">
                   No phone numbers found in Twenty CRM
                 </td>
               </tr>
@@ -119,6 +128,16 @@ export function PhoneNumbersPage() {
                 <td className="px-3 text-[13px] text-[var(--ods-text-secondary)]">{phone.state}</td>
                 <td className="px-3 text-[13px] text-[var(--ods-text-secondary)]">{phone.country}</td>
                 <td className="px-3"><StatusBadge status={phone.status} /></td>
+                <td className="px-3">
+                  {(phone.callState || "IDLE") === "IDLE" || !phone.claimedByMemberId ? (
+                    <span className="text-[11px] text-[var(--ods-text-tertiary)]">Free</span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 text-[12px] text-[var(--ods-text-primary)]" title={`Since ${phone.claimedAt || "—"}`}>
+                      <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                      {phone.callState} · {phone.claimedByEmail || phone.claimedByMemberId}
+                    </span>
+                  )}
+                </td>
                 <td className="px-3 text-[12px] text-[var(--ods-text-tertiary)]">
                   {phone.created_at ? new Date(phone.created_at).toLocaleDateString() : "—"}
                 </td>

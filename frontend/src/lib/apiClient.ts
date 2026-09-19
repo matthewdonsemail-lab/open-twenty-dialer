@@ -200,4 +200,11 @@ export const api = {
     list: () => request<any[]>("/api/profiles"),
     get: (id: string) => request<any>(`/api/profiles/${id}`),
   },
+
+  net: {
+    check: (host: string, port: string | number) =>
+      request<{ ok: boolean; ms: number; host: string; port: number; error?: string }>(
+        `/api/netcheck?host=${encodeURIComponent(host)}&port=${encodeURIComponent(String(port))}`
+      ),
+  },
 };

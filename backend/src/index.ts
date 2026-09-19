@@ -3,6 +3,7 @@ import { fileURLToPath } from "url";
 import { config } from "dotenv";
 import multer from "multer";
 import fs from "fs";
+import net from "net";
 
 // Load environment variables from project root .env.local
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -68,6 +69,33 @@ app.get("/api/health", (_req, res) => {
       databaseMessage: twentyPg.message,
     },
   });
+});
+
+// Pre-flight SIP reachability probe for the Softphone. Host allowlist is
+// deliberately narrow — this must not become an open port scanner.
+const NETCHECK_ALLOW = new Map<string, number[]>([
+  ["sip.telnyx.com", [443, 5061, 7443, 8443]],
+  ["rtc.telnyx.com", [443]],
+]);
+
+app.get("/api/netcheck", (req, res) => {
+  const host = String(req.query.host || "");
+  const port = Number(req.query.port || 0);
+  const allowed = NETCHECK_ALLOW.get(host) || [];
+  if (!allowed.includes(port)) {
+    res.status(400).json({ ok: false, error: "Host/port not in probe allowlist" });
+    return;
+  }
+  const started = Date.now();
+  const socket = net.connect(port, host);
+  const done = (ok: boolean, error?: string) => {
+    try { socket.destroy(); } catch { /* already closed */ }
+    res.json({ ok, ms: Date.now() - started, host, port, ...(error ? { error } : {}) });
+  };
+  socket.setTimeout(8000);
+  socket.once("connect", () => done(true));
+  socket.once("timeout", () => done(false, "connect timed out after 8s"));
+  socket.once("error", (err: any) => done(false, err?.message || "connect failed"));
 });
 
 app.use("/api/auth", authRoutes);
